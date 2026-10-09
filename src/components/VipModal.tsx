@@ -1,28 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Crown, Check, Copy, AlertCircle, Sparkles } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useApp } from '../context/AppContext';
+import { PaymentGatewayType } from '../types';
 
 export const VipModal: React.FC = () => {
   const {
     isVipModalOpen,
     setIsVipModalOpen,
-    siteSettings,
     submitVipOrder,
     currentUser,
     vipPackages,
+    paymentMethods,
     setIsAuthModalOpen,
     isNightMode,
     t,
     showToast,
   } = useApp();
 
+  const enabledPaymentMethods = paymentMethods.filter((pm) => pm.enabled);
+
   const [selectedPackage, setSelectedPackage] = useState<'1 Month' | '3 Months' | '6 Months' | '1 Year'>('3 Months');
-  const [selectedGateway, setSelectedGateway] = useState<'bkash' | 'nagad' | 'rocket'>('bkash');
+  const [selectedGateway, setSelectedGateway] = useState<PaymentGatewayType>('bkash');
   const [senderPhone, setSenderPhone] = useState('');
   const [trxId, setTrxId] = useState('');
   const [copiedNumber, setCopiedNumber] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Keep selected gateway in sync with available enabled methods
+  useEffect(() => {
+    if (enabledPaymentMethods.length > 0 && !enabledPaymentMethods.some((pm) => pm.id === selectedGateway)) {
+      setSelectedGateway(enabledPaymentMethods[0].id);
+    }
+  }, [enabledPaymentMethods, selectedGateway]);
 
   if (!isVipModalOpen) return null;
 
@@ -34,16 +44,16 @@ export const VipModal: React.FC = () => {
     ? Math.ceil((new Date(currentUser.vipBlockedUntil).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : 0;
 
+  const activeMethodConfig = paymentMethods.find((pm) => pm.id === selectedGateway) || enabledPaymentMethods[0];
+
   const getNumberForGateway = () => {
-    if (selectedGateway === 'bkash') return siteSettings.bkashNumber || '0190942xxxx';
-    if (selectedGateway === 'nagad') return siteSettings.nagadNumber || '0190942xxxx';
-    return siteSettings.rocketNumber || '0190942xxxx';
+    return activeMethodConfig?.numberOrAddress || '0190942xxxx';
   };
 
   const handleCopyNumber = () => {
     navigator.clipboard.writeText(getNumberForGateway());
     setCopiedNumber(true);
-    showToast('Payment phone number copied to clipboard!');
+    showToast('Payment account/address copied to clipboard!');
     setTimeout(() => setCopiedNumber(false), 2000);
   };
 
@@ -217,146 +227,156 @@ export const VipModal: React.FC = () => {
               <label className="text-xs font-bold uppercase tracking-wider block mb-2 text-slate-400">
                 {t('selectBanking')}
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedGateway('bkash')}
-                  className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition cursor-pointer ${
-                    selectedGateway === 'bkash'
-                      ? 'bg-[#e2136e]/20 border-[#e2136e] shadow-md'
-                      : isNightMode
-                      ? 'bg-[#181b28] border-slate-800 text-slate-400'
-                      : 'bg-slate-50 border-slate-200 text-slate-600'
-                  }`}
-                >
-                  <div className="w-8 h-8 rounded-lg bg-[#e2136e] flex items-center justify-center text-white font-black text-xs">
-                    bK
-                  </div>
-                  <span className="text-xs font-bold">bKash</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedGateway('nagad')}
-                  className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition cursor-pointer ${
-                    selectedGateway === 'nagad'
-                      ? 'bg-[#f7941d]/20 border-[#f7941d] shadow-md'
-                      : isNightMode
-                      ? 'bg-[#181b28] border-slate-800 text-slate-400'
-                      : 'bg-slate-50 border-slate-200 text-slate-600'
-                  }`}
-                >
-                  <div className="w-8 h-8 rounded-lg bg-[#f7941d] flex items-center justify-center text-white font-black text-xs">
-                    NG
-                  </div>
-                  <span className="text-xs font-bold">Nagad</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedGateway('rocket')}
-                  className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition cursor-pointer ${
-                    selectedGateway === 'rocket'
-                      ? 'bg-[#8c3494]/20 border-[#8c3494] shadow-md'
-                      : isNightMode
-                      ? 'bg-[#181b28] border-slate-800 text-slate-400'
-                      : 'bg-slate-50 border-slate-200 text-slate-600'
-                  }`}
-                >
-                  <div className="w-8 h-8 rounded-lg bg-[#8c3494] flex items-center justify-center text-white font-black text-xs">
-                    RC
-                  </div>
-                  <span className="text-xs font-bold">Rocket</span>
-                </button>
-              </div>
+
+              {enabledPaymentMethods.length === 0 ? (
+                <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-500/40 text-center space-y-2">
+                  <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
+                  <h3 className="text-sm font-bold text-amber-300">
+                    পেমেন্ট গেটওয়ে সাময়িকভাবে স্থগিত
+                  </h3>
+                  <p className="text-xs text-amber-200/90 leading-relaxed max-w-md mx-auto">
+                    সিস্টেম রক্ষণাবেক্ষণ ও আপডেটের জন্য পেমেন্ট মাধ্যমগুলো সাময়িক বন্ধ রাখা হয়েছে। যেকোনো প্রয়োজনে অ্যাডমিনের সাথে যোগাযোগ করুন।
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                  {enabledPaymentMethods.map((pm) => {
+                    const isSelected = selectedGateway === pm.id;
+                    const getBadge = () => {
+                      if (pm.id === 'bkash') return 'bK';
+                      if (pm.id === 'nagad') return 'NG';
+                      if (pm.id === 'rocket') return 'RC';
+                      if (pm.id === 'binance') return 'BN';
+                      return 'WM';
+                    };
+                    return (
+                      <button
+                        key={pm.id}
+                        type="button"
+                        onClick={() => setSelectedGateway(pm.id)}
+                        className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-amber-500/20 border-amber-400 shadow-md ring-1 ring-amber-400'
+                            : isNightMode
+                            ? 'bg-[#181b28] border-slate-800 text-slate-400 hover:border-slate-700'
+                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
+                        }`}
+                      >
+                        <div
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-black text-xs shadow-xs"
+                          style={{ backgroundColor: pm.themeColor || '#e2136e' }}
+                        >
+                          {getBadge()}
+                        </div>
+                        <span className="text-[11px] font-bold truncate max-w-full">
+                          {pm.name.split(' ')[0]}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* Instruction Box */}
-            <div
-              className={`p-3.5 rounded-xl border space-y-2 ${
-                isNightMode ? 'bg-[#161926] border-slate-700/80' : 'bg-slate-50 border-slate-200'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-400">
-                  Send Money to ({selectedGateway.toUpperCase()} Personal):
-                </span>
-                <span className="text-xs font-bold text-amber-500">
-                  Total: ৳ {currentPkg.priceBdt} BDT
-                </span>
-              </div>
+            {/* Instruction Box (Only if gateways enabled) */}
+            {enabledPaymentMethods.length > 0 && (
               <div
-                className={`flex items-center justify-between gap-2 p-2 rounded-lg border ${
-                  isNightMode ? 'bg-[#0e1017] border-slate-800' : 'bg-white border-slate-300'
+                className={`p-3.5 rounded-xl border space-y-2 ${
+                  isNightMode ? 'bg-[#161926] border-slate-700/80' : 'bg-slate-50 border-slate-200'
                 }`}
               >
-                <span className="font-mono text-sm font-bold tracking-wider">
-                  {getNumberForGateway()}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleCopyNumber}
-                  className={`px-2.5 py-1 text-xs font-semibold rounded flex items-center gap-1 transition cursor-pointer ${
-                    isNightMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-200' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">
+                    Send Money / Deposit to ({activeMethodConfig?.name || selectedGateway.toUpperCase()}):
+                  </span>
+                  <span className="text-xs font-bold text-amber-500">
+                    Total: ৳ {currentPkg.priceBdt} BDT
+                  </span>
+                </div>
+                <div
+                  className={`flex items-center justify-between gap-2 p-2 rounded-lg border ${
+                    isNightMode ? 'bg-[#0e1017] border-slate-800' : 'bg-white border-slate-300'
                   }`}
                 >
-                  {copiedNumber ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedNumber ? 'Copied' : 'Copy'}</span>
-                </button>
+                  <span className="font-mono text-xs sm:text-sm font-bold tracking-wider select-all break-all">
+                    {getNumberForGateway()}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopyNumber}
+                    className={`px-2.5 py-1 text-xs font-semibold rounded flex items-center gap-1 transition cursor-pointer shrink-0 ${
+                      isNightMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-200' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
+                    }`}
+                  >
+                    {copiedNumber ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedNumber ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+                {activeMethodConfig?.instructions && (
+                  <p className="text-[11px] text-slate-300 pt-0.5 leading-snug">
+                    {activeMethodConfig.instructions}
+                  </p>
+                )}
+                <div className="flex items-start gap-1.5 text-[11px] text-amber-500 pt-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>{t('sendMoneyNotice')}</span>
+                </div>
               </div>
-              <div className="flex items-start gap-1.5 text-[11px] text-amber-500 pt-1">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                <span>{t('sendMoneyNotice')}</span>
-              </div>
-            </div>
+            )}
 
-            {/* Inputs: Phone Number & TrxID */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-semibold block mb-1">
-                  {t('senderNumber')}
-                </label>
-                <input
-                  type="tel"
-                  required
-                  value={senderPhone}
-                  onChange={(e) => setSenderPhone(e.target.value)}
-                  placeholder="e.g. 01712345678"
-                  className={`w-full text-xs sm:text-sm rounded-lg px-3 py-2.5 border focus:outline-none focus:border-amber-400 ${
-                    isNightMode
-                      ? 'bg-[#181b28] text-slate-100 placeholder-slate-500 border-slate-700'
-                      : 'bg-white text-slate-900 placeholder-slate-400 border-slate-300'
-                  }`}
-                />
+            {/* Inputs: Phone Number & TrxID (Only if gateways enabled) */}
+            {enabledPaymentMethods.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold block mb-1">
+                    {t('senderNumber')}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={senderPhone}
+                    onChange={(e) => setSenderPhone(e.target.value)}
+                    placeholder="e.g. 01712345678 or Binance ID"
+                    className={`w-full text-xs sm:text-sm rounded-lg px-3 py-2.5 border focus:outline-none focus:border-amber-400 ${
+                      isNightMode
+                        ? 'bg-[#181b28] text-slate-100 placeholder-slate-500 border-slate-700'
+                        : 'bg-white text-slate-900 placeholder-slate-400 border-slate-300'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold block mb-1">
+                    {t('trxId')}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={trxId}
+                    onChange={(e) => setTrxId(e.target.value)}
+                    placeholder="e.g. BL84920X / TxHash"
+                    className={`w-full text-xs sm:text-sm font-mono rounded-lg px-3 py-2.5 border uppercase focus:outline-none focus:border-amber-400 ${
+                      isNightMode
+                        ? 'bg-[#181b28] text-slate-100 placeholder-slate-500 border-slate-700'
+                        : 'bg-white text-slate-900 placeholder-slate-400 border-slate-300'
+                    }`}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-xs font-semibold block mb-1">
-                  {t('trxId')}
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={trxId}
-                  onChange={(e) => setTrxId(e.target.value)}
-                  placeholder="e.g. BL84920X"
-                  className={`w-full text-xs sm:text-sm font-mono rounded-lg px-3 py-2.5 border uppercase focus:outline-none focus:border-amber-400 ${
-                    isNightMode
-                      ? 'bg-[#181b28] text-slate-100 placeholder-slate-500 border-slate-700'
-                      : 'bg-white text-slate-900 placeholder-slate-400 border-slate-300'
-                  }`}
-                />
-              </div>
-            </div>
+            )}
 
             <button
               type="submit"
-              disabled={isVipBlocked}
+              disabled={isVipBlocked || enabledPaymentMethods.length === 0}
               className={`w-full py-3 font-extrabold text-sm rounded-xl uppercase tracking-wider shadow-lg transition transform ${
-                isVipBlocked
+                isVipBlocked || enabledPaymentMethods.length === 0
                   ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
                   : 'bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 hover:scale-[1.01] cursor-pointer'
               }`}
             >
               {isVipBlocked
                 ? `Account Blocked (${daysLeftBlocked}d remaining)`
+                : enabledPaymentMethods.length === 0
+                ? 'Payment Temporarily Unavailable'
                 : `${t('submitVipRequest')} (৳ ${currentPkg.priceBdt})`}
             </button>
           </form>

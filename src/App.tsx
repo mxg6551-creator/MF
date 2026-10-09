@@ -16,6 +16,7 @@ import { GuestLoginPromptModal } from './components/GuestLoginPromptModal';
 import { UserGuideModal } from './components/UserGuideModal';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { AgeGateModal } from './components/AgeGateModal';
+import { BodyAdsInjector } from './components/BodyAdsInjector';
 import { Flame, ArrowDown, Sparkles, AlertTriangle } from 'lucide-react';
 
 export default function App() {
@@ -240,6 +241,9 @@ export default function App() {
 
       {/* Admin Dashboard */}
       <AdminDashboard />
+
+      {/* Popunder & Social Bar Ads Injector (Injected above </body> tag) */}
+      <BodyAdsInjector />
 
       {/* Global Toast Notification */}
       {toastMessage && (

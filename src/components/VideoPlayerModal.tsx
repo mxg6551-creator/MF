@@ -20,6 +20,8 @@ import {
   Copy,
   Check,
   Zap,
+  Clock,
+  Ban,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { AdBanner } from './AdBanner';
@@ -37,6 +39,7 @@ export const VideoPlayerModal: React.FC = () => {
     comments,
     adSettings,
     setIsVipModalOpen,
+    setIsAuthModalOpen,
     recordVideoWatch,
     isAdminLoggedIn,
     isNightMode,
@@ -48,17 +51,21 @@ export const VideoPlayerModal: React.FC = () => {
   const [copiedLink, setCopiedLink] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
 
-  // 3-step Ad Verification State
+  // 3-step Ad Verification State with 5-second countdown
   const [ad1Verified, setAd1Verified] = useState(false);
   const [ad2Verified, setAd2Verified] = useState(false);
   const [ad3Verified, setAd3Verified] = useState(false);
-  const [verifyingStep, setVerifyingStep] = useState<number | null>(null);
+  const [ad1Countdown, setAd1Countdown] = useState<number>(0);
+  const [ad2Countdown, setAd2Countdown] = useState<number>(0);
+  const [ad3Countdown, setAd3Countdown] = useState<number>(0);
 
   useEffect(() => {
     setAd1Verified(false);
     setAd2Verified(false);
     setAd3Verified(false);
-    setVerifyingStep(null);
+    setAd1Countdown(0);
+    setAd2Countdown(0);
+    setAd3Countdown(0);
     if (activeVideo?.id) {
       recordVideoWatch(activeVideo.id);
     }
@@ -72,24 +79,94 @@ export const VideoPlayerModal: React.FC = () => {
   const isLiked = currentUser?.likedVideoIds.includes(activeVideo.id);
   const isSaved = currentUser?.savedVideoIds.includes(activeVideo.id);
   const videoComments = comments.filter((c) => c.videoId === activeVideo.id);
+  const isDownloadAllowed = activeVideo.downloadEnabled !== false;
 
   const handleVerifyAd = (step: number, adUrl: string) => {
-    setVerifyingStep(step);
+    // Require authentication/registration for download verification
+    if (!currentUser) {
+      showToast('ভিডিও ডাউনলোড করতে দয়া করে লগইন বা রেজিস্টার করুন (Please login or register to download)');
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    if (step === 1) {
+      if (ad1Verified || ad1Countdown > 0) return;
+    } else if (step === 2) {
+      if (!ad1Verified) {
+        showToast('Please verify Step 1 first!');
+        return;
+      }
+      if (ad2Verified || ad2Countdown > 0) return;
+    } else if (step === 3) {
+      if (!ad2Verified) {
+        showToast('Please verify Step 2 first!');
+        return;
+      }
+      if (ad3Verified || ad3Countdown > 0) return;
+    }
+
     if (adUrl) {
       window.open(adUrl, '_blank', 'noopener,noreferrer');
     }
-    setTimeout(() => {
-      if (step === 1) setAd1Verified(true);
-      if (step === 2) setAd2Verified(true);
-      if (step === 3) setAd3Verified(true);
-      setVerifyingStep(null);
-      showToast(`Ad Step ${step} verified!`);
-    }, 2000);
+
+    if (step === 1) {
+      setAd1Countdown(5);
+      const interval = setInterval(() => {
+        setAd1Countdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setAd1Verified(true);
+            showToast('✓ Step 1 Verified (Green)! Now verify Step 2.');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else if (step === 2) {
+      setAd2Countdown(5);
+      const interval = setInterval(() => {
+        setAd2Countdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setAd2Verified(true);
+            showToast('✓ Step 2 Verified (Green)! Now verify Step 3.');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else if (step === 3) {
+      setAd3Countdown(5);
+      const interval = setInterval(() => {
+        setAd3Countdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setAd3Verified(true);
+            showToast('✓ Step 3 Verified (Green)! Download unlocked 🎉');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
   };
 
   const allAdsVerified = ad1Verified && ad2Verified && ad3Verified;
 
   const handleDownload = () => {
+    // If not logged in, prompt authentication/registration!
+    if (!currentUser) {
+      showToast('Please login or register to download videos!');
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    // Check if download is disabled by admin for this video
+    if (!isDownloadAllowed) {
+      showToast('Download is disabled for this video by admin.');
+      return;
+    }
+
     // If video is VIP and user is NOT VIP: Block download completely!
     if (isVideoVip && !isUserVip) {
       showToast(t('vipOnlyDownloadNotice'));
@@ -296,10 +373,14 @@ export const VideoPlayerModal: React.FC = () => {
 
             <button
               onClick={handleDownload}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-md transition cursor-pointer"
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition shadow-md ${
+                !isDownloadAllowed
+                  ? 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white cursor-pointer'
+              }`}
             >
               <Download className="w-3.5 h-3.5" />
-              <span>{t('download')}</span>
+              <span>{!isDownloadAllowed ? 'Download Off' : t('download')}</span>
             </button>
           </div>
 
@@ -351,13 +432,26 @@ export const VideoPlayerModal: React.FC = () => {
 
           <AdBanner slot="player" />
 
-          {/* DOWNLOAD SECTION: Strict VIP vs Free Logic */}
+          {/* DOWNLOAD SECTION: Strict VIP vs Free Logic + Download Enabled Check */}
           <div
             className={`rounded-xl border p-4 space-y-3 ${
               isNightMode ? 'bg-[#141622] border-slate-800' : 'bg-slate-50 border-slate-200'
             }`}
           >
-            {isVideoVip && !isUserVip ? (
+            {!isDownloadAllowed ? (
+              /* Case 0: Download is turned OFF by admin */
+              <div className="text-center py-4 space-y-2">
+                <div className="w-11 h-11 mx-auto rounded-full bg-red-500/15 border border-red-500/40 flex items-center justify-center text-red-400">
+                  <Ban className="w-5 h-5" />
+                </div>
+                <h3 className="text-sm font-bold text-red-400 uppercase tracking-wider">
+                  ডাউনলোড বন্ধ (Download Off)
+                </h3>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  এই ভিডিওটির জন্য ডাউনলোড সুবিধা বর্তমানে অ্যাডমিন কর্তৃক বন্ধ রাখা হয়েছে।
+                </p>
+              </div>
+            ) : isVideoVip && !isUserVip ? (
               /* Case 1: Video is VIP, user is Free -> BLOCKED completely! */
               <div className="text-center py-4 space-y-2">
                 <div className="w-10 h-10 mx-auto rounded-full bg-amber-500/20 border border-amber-400 flex items-center justify-center text-amber-400">
@@ -406,7 +500,7 @@ export const VideoPlayerModal: React.FC = () => {
                 </button>
               </div>
             ) : (
-              /* Case 3: Free video & Free user -> 3-step ads verification required */
+              /* Case 3: Free video & Free user -> 3-step ads verification required with 5-second timer */
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -415,75 +509,116 @@ export const VideoPlayerModal: React.FC = () => {
                     </div>
                     <div>
                       <h3 className="text-xs sm:text-sm font-bold text-amber-400">
-                        {t('protectedDownload')} (3 Ads)
+                        {t('protectedDownload')} (3 Ads Verification)
                       </h3>
                       <p className="text-[11px] text-slate-400">
-                        Verify all 3 sponsor links below to unlock the official download link.
+                        বিজ্ঞাপন ওপেন করুন এবং ৫ সেকেন্ড অপেক্ষা করুন। ৩টি ভেরিফাই হলেই ফাইল ডাউনলোড আনলক হবে।
                       </p>
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {/* Step 1 Button */}
                   <button
                     onClick={() => handleVerifyAd(1, adSettings.smartLink1)}
-                    className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    disabled={ad1Verified || ad1Countdown > 0}
+                    className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-bold transition ${
                       ad1Verified
-                        ? 'bg-emerald-950/50 text-emerald-300 border border-emerald-600/50'
-                        : 'bg-red-600 hover:bg-red-500 text-white shadow'
+                        ? 'bg-emerald-600 text-white border border-emerald-400 shadow-md ring-1 ring-emerald-400 cursor-default'
+                        : ad1Countdown > 0
+                        ? 'bg-amber-600 text-white animate-pulse shadow cursor-wait'
+                        : 'bg-red-600 hover:bg-red-500 text-white shadow cursor-pointer'
                     }`}
                   >
                     {ad1Verified ? (
                       <>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>1. Verified</span>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                        <span>1. Verified ✓ (Green)</span>
+                      </>
+                    ) : ad1Countdown > 0 ? (
+                      <>
+                        <Clock className="w-3.5 h-3.5 animate-spin" />
+                        <span>Verifying... ({ad1Countdown}s)</span>
                       </>
                     ) : (
                       <>
                         <ExternalLink className="w-3.5 h-3.5" />
-                        <span>{verifyingStep === 1 ? 'Checking...' : t('verifyAd1')}</span>
+                        <span>{t('verifyAd1')}</span>
                       </>
                     )}
                   </button>
 
+                  {/* Step 2 Button (Locked until Step 1 is verified) */}
                   <button
                     onClick={() => handleVerifyAd(2, adSettings.smartLink2)}
-                    className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    disabled={!ad1Verified || ad2Verified || ad2Countdown > 0}
+                    className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-bold transition ${
                       ad2Verified
-                        ? 'bg-emerald-950/50 text-emerald-300 border border-emerald-600/50'
-                        : 'bg-red-600 hover:bg-red-500 text-white shadow'
+                        ? 'bg-emerald-600 text-white border border-emerald-400 shadow-md ring-1 ring-emerald-400 cursor-default'
+                        : ad2Countdown > 0
+                        ? 'bg-amber-600 text-white animate-pulse shadow cursor-wait'
+                        : !ad1Verified
+                        ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-75'
+                        : 'bg-red-600 hover:bg-red-500 text-white shadow cursor-pointer'
                     }`}
                   >
                     {ad2Verified ? (
                       <>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>2. Verified</span>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                        <span>2. Verified ✓ (Green)</span>
+                      </>
+                    ) : ad2Countdown > 0 ? (
+                      <>
+                        <Clock className="w-3.5 h-3.5 animate-spin" />
+                        <span>Verifying... ({ad2Countdown}s)</span>
+                      </>
+                    ) : !ad1Verified ? (
+                      <>
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>2. Complete Step 1 First</span>
                       </>
                     ) : (
                       <>
                         <ExternalLink className="w-3.5 h-3.5" />
-                        <span>{verifyingStep === 2 ? 'Checking...' : t('verifyAd2')}</span>
+                        <span>{t('verifyAd2')}</span>
                       </>
                     )}
                   </button>
 
+                  {/* Step 3 Button (Locked until Step 2 is verified) */}
                   <button
                     onClick={() => handleVerifyAd(3, adSettings.smartLink3)}
-                    className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    disabled={!ad2Verified || ad3Verified || ad3Countdown > 0}
+                    className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-bold transition ${
                       ad3Verified
-                        ? 'bg-emerald-950/50 text-emerald-300 border border-emerald-600/50'
-                        : 'bg-red-600 hover:bg-red-500 text-white shadow'
+                        ? 'bg-emerald-600 text-white border border-emerald-400 shadow-md ring-1 ring-emerald-400 cursor-default'
+                        : ad3Countdown > 0
+                        ? 'bg-amber-600 text-white animate-pulse shadow cursor-wait'
+                        : !ad2Verified
+                        ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-75'
+                        : 'bg-red-600 hover:bg-red-500 text-white shadow cursor-pointer'
                     }`}
                   >
                     {ad3Verified ? (
                       <>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>3. Verified</span>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                        <span>3. Verified ✓ (Green)</span>
+                      </>
+                    ) : ad3Countdown > 0 ? (
+                      <>
+                        <Clock className="w-3.5 h-3.5 animate-spin" />
+                        <span>Verifying... ({ad3Countdown}s)</span>
+                      </>
+                    ) : !ad2Verified ? (
+                      <>
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>3. Complete Step 2 First</span>
                       </>
                     ) : (
                       <>
                         <ExternalLink className="w-3.5 h-3.5" />
-                        <span>{verifyingStep === 3 ? 'Checking...' : t('verifyAd3')}</span>
+                        <span>{t('verifyAd3')}</span>
                       </>
                     )}
                   </button>
@@ -492,9 +627,9 @@ export const VideoPlayerModal: React.FC = () => {
                 <button
                   onClick={handleDownload}
                   disabled={!allAdsVerified}
-                  className={`w-full py-3 rounded-lg text-xs sm:text-sm font-extrabold uppercase tracking-wider flex items-center justify-center gap-2 transition ${
+                  className={`w-full py-3.5 rounded-xl text-xs sm:text-sm font-extrabold uppercase tracking-wider flex items-center justify-center gap-2 transition ${
                     allAdsVerified
-                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg cursor-pointer'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-xl ring-2 ring-emerald-400/50 cursor-pointer animate-pulse'
                       : 'bg-slate-800/90 text-slate-500 border border-slate-700/60 cursor-not-allowed'
                   }`}
                 >

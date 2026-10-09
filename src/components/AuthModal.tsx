@@ -160,44 +160,56 @@ export const AuthModal: React.FC = () => {
         {/* Content */}
         {currentUser ? (
           <div className="p-4 sm:p-5 space-y-4">
-            {/* User Info Card */}
+            {/* User Info Card with Instant Sign Out */}
             <div
-              className={`flex items-center gap-3.5 p-3 rounded-xl border ${
+              className={`flex items-center justify-between gap-3 p-3 rounded-xl border ${
                 isNightMode ? 'bg-[#171a27] border-slate-800' : 'bg-slate-50 border-slate-200'
               }`}
             >
-              <img
-                src={currentUser.avatar}
-                alt={currentUser.username}
-                className="w-14 h-14 rounded-full border-2 border-amber-400 object-cover shadow-sm"
-                referrerPolicy="no-referrer"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`text-sm truncate ${
-                      currentUser.isVip
-                        ? 'font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-yellow-300 to-amber-100 drop-shadow-[0_0_8px_rgba(250,204,21,0.6)] animate-pulse'
-                        : 'font-bold'
-                    }`}
-                  >
-                    {currentUser.username}
-                  </span>
-                  {currentUser.isVip ? (
-                    <span className="text-[10px] font-black text-amber-300 bg-amber-950 border border-amber-500/50 px-1.5 py-0.2 rounded-full flex items-center gap-1 shadow-sm">
-                      <Crown className="w-2.5 h-2.5 fill-amber-300 animate-bounce" /> VIP
+              <div className="flex items-center gap-3 min-w-0">
+                <img
+                  src={currentUser.avatar}
+                  alt={currentUser.username}
+                  className="w-12 h-12 rounded-full border-2 border-amber-400 object-cover shadow-sm shrink-0"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className={`text-sm truncate ${
+                        currentUser.isVip
+                          ? 'font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-yellow-300 to-amber-100 drop-shadow-[0_0_8px_rgba(250,204,21,0.6)] animate-pulse'
+                          : 'font-bold'
+                      }`}
+                    >
+                      {currentUser.username}
                     </span>
-                  ) : (
-                    <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.2 rounded">
-                      Free User
-                    </span>
-                  )}
-                </div>
-                <div className="text-xs text-slate-400 truncate">{currentUser.email}</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
-                  Last active: {currentUser.lastLoginAt}
+                    {currentUser.isVip ? (
+                      <span className="text-[10px] font-black text-amber-300 bg-amber-950 border border-amber-500/50 px-1.5 py-0.2 rounded-full flex items-center gap-1 shadow-sm">
+                        <Crown className="w-2.5 h-2.5 fill-amber-300 animate-bounce" /> VIP
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.2 rounded">
+                        Free User
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-400 truncate">{currentUser.email}</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    Active: {currentUser.lastActiveAt || 'Online'}
+                  </div>
                 </div>
               </div>
+
+              {/* Direct Instant Sign Out Button in Card */}
+              <button
+                onClick={logoutUser}
+                title="Sign Out of Account"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-950/70 hover:bg-red-900 text-red-300 border border-red-800/80 text-xs font-bold transition shrink-0 cursor-pointer shadow-xs"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Sign Out</span>
+              </button>
             </div>
 
             {/* Profile Tab Navigation (5 Tabs including Watch History) */}
@@ -671,6 +683,96 @@ export const AuthModal: React.FC = () => {
         ) : (
           /* NOT LOGGED IN: Form */
           <div className="p-5 space-y-4">
+            {/* Mode Switcher */}
+            <div className="flex border border-slate-700/80 rounded-xl overflow-hidden p-1 bg-[#141624]">
+              <button
+                type="button"
+                onClick={() => setAuthMode('login')}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+                  authMode === 'login'
+                    ? 'bg-[#facc15] text-black shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthMode('register')}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+                  authMode === 'register'
+                    ? 'bg-[#facc15] text-black shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Create Account (Register)
+              </button>
+            </div>
+
+            <form onSubmit={handleManualAuth} className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold block mb-1">
+                  Username <span className="text-amber-400">*</span>
+                </label>
+                <div className="relative flex items-center">
+                  <UserIcon className="w-4 h-4 text-slate-400 absolute left-3" />
+                  <input
+                    type="text"
+                    required
+                    value={usernameInput}
+                    onChange={(e) => setUsernameInput(e.target.value)}
+                    placeholder={authMode === 'login' ? "Enter your username" : "Choose a unique username"}
+                    className={`w-full text-xs sm:text-sm rounded-lg pl-9 pr-3 py-2 border focus:outline-none focus:border-[#facc15] ${
+                      isNightMode
+                        ? 'bg-[#181a28] text-slate-100 border-slate-700'
+                        : 'bg-slate-50 text-slate-900 border-slate-300'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold block mb-1">
+                  Password <span className="text-amber-400">*</span>
+                </label>
+                <div className="relative flex items-center">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3" />
+                  <input
+                    type="password"
+                    required
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    placeholder="••••••••"
+                    className={`w-full text-xs sm:text-sm rounded-lg pl-9 pr-3 py-2 border focus:outline-none focus:border-[#facc15] ${
+                      isNightMode
+                        ? 'bg-[#181a28] text-slate-100 border-slate-700'
+                        : 'bg-slate-50 text-slate-900 border-slate-300'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-400">
+                {authMode === 'register'
+                  ? 'Note: No email required! New account starts with 0 likes & 0 active time.'
+                  : 'Enter your account username and password to log in.'}
+              </p>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-[#facc15] hover:bg-[#eab308] text-black font-extrabold text-xs sm:text-sm rounded-lg uppercase tracking-wider transition shadow cursor-pointer"
+              >
+                {authMode === 'login' ? 'Sign In Now' : 'Create Free Account (Register)'}
+              </button>
+            </form>
+
+            <div className="relative flex items-center justify-center">
+              <div className="border-t border-slate-700 w-full" />
+              <span className="px-3 text-[11px] text-slate-400 uppercase tracking-wider bg-[#11131c]">
+                Or connect with Gmail (Optional)
+              </span>
+            </div>
+
             <button
               onClick={handleGoogleLogin}
               className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs sm:text-sm shadow transition cursor-pointer"
@@ -693,62 +795,8 @@ export const AuthModal: React.FC = () => {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                 />
               </svg>
-              <span>Continue with Google</span>
+              <span>Continue with Google / Gmail</span>
             </button>
-
-            <div className="relative flex items-center justify-center">
-              <div className="border-t border-slate-700 w-full" />
-              <span className="px-3 text-[11px] text-slate-500 uppercase tracking-wider">
-                Or with username
-              </span>
-            </div>
-
-            <form onSubmit={handleManualAuth} className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold block mb-1">Username</label>
-                <div className="relative flex items-center">
-                  <UserIcon className="w-4 h-4 text-slate-400 absolute left-3" />
-                  <input
-                    type="text"
-                    required
-                    value={usernameInput}
-                    onChange={(e) => setUsernameInput(e.target.value)}
-                    placeholder="Enter your username"
-                    className={`w-full text-xs sm:text-sm rounded-lg pl-9 pr-3 py-2 border focus:outline-none focus:border-[#facc15] ${
-                      isNightMode
-                        ? 'bg-[#181a28] text-slate-100 border-slate-700'
-                        : 'bg-slate-50 text-slate-900 border-slate-300'
-                    }`}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold block mb-1">Password</label>
-                <div className="relative flex items-center">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3" />
-                  <input
-                    type="password"
-                    required
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    placeholder="••••••••"
-                    className={`w-full text-xs sm:text-sm rounded-lg pl-9 pr-3 py-2 border focus:outline-none focus:border-[#facc15] ${
-                      isNightMode
-                        ? 'bg-[#181a28] text-slate-100 border-slate-700'
-                        : 'bg-slate-50 text-slate-900 border-slate-300'
-                    }`}
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-2.5 bg-[#facc15] hover:bg-[#eab308] text-black font-extrabold text-xs sm:text-sm rounded-lg uppercase tracking-wider transition shadow cursor-pointer"
-              >
-                {authMode === 'login' ? 'Sign In / Register' : 'Register Now'}
-              </button>
-            </form>
           </div>
         )}
       </div>

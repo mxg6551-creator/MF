@@ -261,10 +261,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : INITIAL_STATS;
   });
 
-  // Current logged in user: default is Free Guest Viewer (Strict: isVip is false!)
+  // Current logged in user: default is null (visitor has no account until logged in/registered)
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('mmshub_current_user');
-    return saved ? JSON.parse(saved) : INITIAL_USERS[INITIAL_USERS.length - 1];
+    return saved ? JSON.parse(saved) : null;
   });
 
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(false);
@@ -364,24 +364,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('mmshub_current_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('mmshub_current_user');
     }
   }, [currentUser]);
 
-  // Live time-on-site tracker for leaderboard (increments every second)
+  // Live time-on-site tracker for logged-in user: only counts when tab is active/visible
+  // Pauses automatically when tab is hidden or user leaves, resumes seamlessly on return
   useEffect(() => {
+    if (!currentUser) return;
+
+    let tickCount = 0;
     const timer = setInterval(() => {
-      if (currentUser) {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        tickCount += 1;
         setCurrentUser((prev) => {
           if (!prev) return null;
+          const updatedSeconds = (prev.timeSpentSeconds || 0) + 1;
           return {
             ...prev,
-            timeSpentSeconds: (prev.timeSpentSeconds || 0) + 1,
+            timeSpentSeconds: updatedSeconds,
             isOnline: true,
             lastActiveAt: 'Just now',
           };
         });
+
+        // Sync to users collection every 5 seconds for smooth performance
+        if (tickCount % 5 === 0) {
+          setUsers((prevUsers) =>
+            prevUsers.map((u) =>
+              u.id === currentUser.id
+                ? {
+                    ...u,
+                    timeSpentSeconds: (u.timeSpentSeconds || 0) + 5,
+                    isOnline: true,
+                    lastActiveAt: 'Just now',
+                  }
+                : u
+            )
+          );
+        }
       }
     }, 1000);
+
     return () => clearInterval(timer);
   }, [currentUser?.id]);
 
@@ -446,6 +471,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       views: 1,
       likes: 1,
       dislikes: 0,
+      downloadEnabled: newVidData.downloadEnabled !== false,
     };
     setVideos((prev) => [newVideo, ...prev]);
     setStats((prev) => ({
@@ -506,6 +532,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const likeVideo = (id: string) => {
     if (!currentUser) {
       setIsAuthModalOpen(true);
+      showToast('Please login or register to like videos!');
       return;
     }
     const isLiked = currentUser.likedVideoIds.includes(id);
@@ -538,6 +565,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const toggleSaveVideo = (id: string) => {
     if (!currentUser) {
       setIsAuthModalOpen(true);
+      showToast('Please login or register to save to playlist!');
       return;
     }
     const isSaved = currentUser.savedVideoIds.includes(id);
@@ -821,6 +849,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newUser: User = {
         id: `u-${Date.now()}`,
         username: trimmedUser,
+        name: trimmedUser,
         password: password || '123456',
         email: `${trimmedUser.toLowerCase()}@user.tube`,
         avatar: randomAvatar,
@@ -830,9 +859,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         savedVideoIds: [],
         likedVideoIds: [],
         watchHistory: [],
-        timeSpentSeconds: 60,
+        timeSpentSeconds: 0, // Starts strictly at 0!
         videosWatchedCount: 0,
-        likesReceivedCount: 0,
+        likesReceivedCount: 0, // Starts strictly at 0 likes!
         lastLikedByUsers: [],
         isOnline: true,
         lastActiveAt: 'Just now',
@@ -853,9 +882,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentUser) {
       setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? { ...u, isOnline: false } : u)));
     }
-    // Switch to guest user
-    setCurrentUser(INITIAL_USERS[INITIAL_USERS.length - 1]);
-    showToast('Logged out.');
+    setCurrentUser(null);
+    localStorage.removeItem('mmshub_current_user');
+    setIsAuthModalOpen(false);
+    showToast('Signed out successfully.');
   };
 
   // Enforces unique username & 30-day constraint

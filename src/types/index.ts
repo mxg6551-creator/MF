@@ -14,6 +14,7 @@ export interface Video {
   author: string;
   isVip: boolean;
   downloadUrl?: string;
+  downloadEnabled?: boolean;
   quality?: 'HD' | '4K' | 'SD';
 }
 
@@ -33,6 +34,7 @@ export interface Comment {
 export interface User {
   id: string;
   username: string;
+  name?: string;
   password?: string;
   email?: string;
   avatar: string;
@@ -129,6 +131,9 @@ export interface AdSettings {
   smartLink2: string;
   smartLink3: string;
   directDownloadLink: string;
+  popunderEnabled?: boolean;
+  popunderCode?: string;
+  socialBarCode?: string;
 }
 
 export interface SiteSettings {

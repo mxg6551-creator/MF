@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Menu, Settings, Crown, Trophy, User as UserIcon, ShieldCheck } from 'lucide-react';
+import { Menu, Settings, Crown, Trophy, User as UserIcon, ShieldCheck, LogOut } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const Header: React.FC = () => {
@@ -12,6 +12,7 @@ export const Header: React.FC = () => {
     setIsLeaderboardOpen,
     setIsAdminOpen,
     currentUser,
+    logoutUser,
     isAdminLoggedIn,
     isNightMode,
     t,
@@ -159,6 +160,18 @@ export const Header: React.FC = () => {
               </span>
             </div>
           </button>
+
+          {/* Quick Sign Out button if user is logged in */}
+          {currentUser && (
+            <button
+              onClick={() => logoutUser()}
+              title="Sign Out / লগআউট"
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold text-red-400 bg-red-950/30 hover:bg-red-950/70 border border-red-800/50 transition cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sign Out</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

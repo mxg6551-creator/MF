@@ -24,6 +24,9 @@ import {
   Crown,
   ShieldAlert,
   Ban,
+  CreditCard,
+  Check,
+  Sparkles,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Video, User } from '../../types';
@@ -52,6 +55,8 @@ export const AdminDashboard: React.FC = () => {
     unblockUserFromVip,
     vipPackages,
     updateVipPackagePrice,
+    paymentMethods,
+    updatePaymentMethod,
     subAdmins,
     addSubAdmin,
     removeSubAdmin,
@@ -75,7 +80,7 @@ export const AdminDashboard: React.FC = () => {
 
   // Active admin tab
   const [currentTab, setCurrentTab] = useState<
-    'stats' | 'posts' | 'orders' | 'users' | 'subadmins' | 'links' | 'categories' | 'comments' | 'ads' | 'settings'
+    'stats' | 'posts' | 'orders' | 'gateways' | 'users' | 'subadmins' | 'links' | 'categories' | 'comments' | 'ads' | 'settings'
   >('stats');
 
   // Video editor modal state (includes Views, Likes, Dislikes modifications!)
@@ -90,13 +95,22 @@ export const AdminDashboard: React.FC = () => {
   const [videoEmbedCode, setVideoEmbedCode] = useState('');
   const [videoDownloadUrl, setVideoDownloadUrl] = useState('');
   const [videoIsVip, setVideoIsVip] = useState(false);
+  const [videoDownloadEnabled, setVideoDownloadEnabled] = useState(true);
   const [videoQuality, setVideoQuality] = useState<'HD' | '4K' | 'SD'>('HD');
   const [videoViews, setVideoViews] = useState(1400);
   const [videoLikes, setVideoLikes] = useState(120);
   const [videoDislikes, setVideoDislikes] = useState(5);
 
-  // User management states
+  // User management & edit states
   const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editUserName, setEditUserName] = useState('');
+  const [editUserFullName, setEditUserFullName] = useState('');
+  const [editUserPassword, setEditUserPassword] = useState('');
+  const [editUserLikes, setEditUserLikes] = useState(0);
+  const [editUserMinutes, setEditUserMinutes] = useState(0);
+  const [editUserIsVip, setEditUserIsVip] = useState(false);
+  const [editUserCountry, setEditUserCountry] = useState('BD');
 
   // Sub-admin form
   const [newSubName, setNewSubName] = useState('');
@@ -132,6 +146,10 @@ export const AdminDashboard: React.FC = () => {
   const [smartLink2, setSmartLink2] = useState(adSettings.smartLink2);
   const [smartLink3, setSmartLink3] = useState(adSettings.smartLink3);
   const [directDownload, setDirectDownload] = useState(adSettings.directDownloadLink);
+  const [popunderCode, setPopunderCode] = useState(adSettings.popunderCode || '');
+  const [popunderEnabled, setPopunderEnabled] = useState(adSettings.popunderEnabled !== false);
+  const [socialBarCode, setSocialBarCode] = useState(adSettings.socialBarCode || '');
+  const [socialBarEnabled, setSocialBarEnabled] = useState(adSettings.socialBarEnabled !== false);
 
   if (!isAdminOpen) return null;
 
@@ -161,6 +179,7 @@ export const AdminDashboard: React.FC = () => {
     setVideoEmbedCode('<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" frameborder="0" allowfullscreen></iframe>');
     setVideoDownloadUrl('https://mega.nz/folder/mmshub-vault');
     setVideoIsVip(false);
+    setVideoDownloadEnabled(true);
     setVideoQuality('HD');
     setVideoViews(1200);
     setVideoLikes(95);
@@ -179,6 +198,7 @@ export const AdminDashboard: React.FC = () => {
     setVideoEmbedCode(video.embedCode);
     setVideoDownloadUrl(video.downloadUrl || '');
     setVideoIsVip(video.isVip);
+    setVideoDownloadEnabled(video.downloadEnabled !== false);
     setVideoQuality(video.quality || 'HD');
     setVideoViews(video.views);
     setVideoLikes(video.likes);
@@ -229,6 +249,7 @@ export const AdminDashboard: React.FC = () => {
         embedCode: videoEmbedCode.trim(),
         downloadUrl: videoDownloadUrl.trim(),
         isVip: videoIsVip,
+        downloadEnabled: videoDownloadEnabled,
         quality: videoQuality,
         views: Number(videoViews),
         likes: Number(videoLikes),
@@ -245,11 +266,39 @@ export const AdminDashboard: React.FC = () => {
         embedCode: videoEmbedCode.trim(),
         downloadUrl: videoDownloadUrl.trim(),
         isVip: videoIsVip,
+        downloadEnabled: videoDownloadEnabled,
         quality: videoQuality,
         author: 'Admin Moon',
       });
     }
     setIsEditorOpen(false);
+  };
+
+  // Open User Edit Modal
+  const handleOpenEditUser = (u: User) => {
+    setEditingUser(u);
+    setEditUserName(u.username);
+    setEditUserFullName(u.name || u.username);
+    setEditUserPassword(u.password || '');
+    setEditUserLikes(u.likesReceivedCount || 0);
+    setEditUserMinutes(Math.floor((u.timeSpentSeconds || 0) / 60));
+    setEditUserIsVip(u.isVip);
+    setEditUserCountry(u.country || 'BD');
+  };
+
+  const handleSaveUserEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    updateUserByAdmin(editingUser.id, {
+      username: editUserName.trim() || editingUser.username,
+      name: editUserFullName.trim(),
+      password: editUserPassword.trim(),
+      likesReceivedCount: Number(editUserLikes),
+      timeSpentSeconds: Number(editUserMinutes) * 60,
+      isVip: editUserIsVip,
+      country: editUserCountry,
+    });
+    setEditingUser(null);
   };
 
   // Sub-Admin Add
@@ -478,6 +527,18 @@ export const AdminDashboard: React.FC = () => {
                 </button>
 
                 <button
+                  onClick={() => setCurrentTab('gateways')}
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                    currentTab === 'gateways'
+                      ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                      : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'
+                  }`}
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Payment Gateways ({paymentMethods.length})</span>
+                </button>
+
+                <button
                   onClick={() => setCurrentTab('links')}
                   className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
                     currentTab === 'links'
@@ -672,6 +733,15 @@ export const AdminDashboard: React.FC = () => {
                                   VIP
                                 </span>
                               )}
+                              <span
+                                className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+                                  vid.downloadEnabled !== false
+                                    ? 'bg-emerald-950/80 text-emerald-400 border-emerald-700/60'
+                                    : 'bg-red-950/80 text-red-400 border-red-700/60'
+                                }`}
+                              >
+                                {vid.downloadEnabled !== false ? 'DL ON' : 'DL OFF'}
+                              </span>
                             </div>
                             <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
                               <span className="capitalize">{vid.category}</span>
@@ -776,6 +846,15 @@ export const AdminDashboard: React.FC = () => {
                         </div>
 
                         <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
+                          <button
+                            onClick={() => handleOpenEditUser(u)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 transition cursor-pointer"
+                            title="Edit user username, name, password, likes & stats"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                            <span>Edit User</span>
+                          </button>
+
                           <button
                             onClick={() => {
                               updateUserByAdmin(u.id, { isVip: !u.isVip });
@@ -1047,6 +1126,138 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               )}
 
+              {/* TAB: PAYMENT GATEWAYS (bKash, Nagad, Rocket, Binance, WebMoney) */}
+              {currentTab === 'gateways' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-base font-bold text-white flex items-center gap-2">
+                        <CreditCard className="w-5 h-5 text-amber-400" />
+                        Payment Gateways Control (bKash, Nagad, Rocket, Binance, WebMoney)
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        টগল অন/অফ করুন এবং বিকাশ, নগদ, রকেট, বাইনান্স ও ওয়েবমানির নম্বর বা অ্যাড্রেস সেটআপ করুন। অফ থাকলে পেমেন্ট স্ক্রিনে দেখাবে না।
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {paymentMethods.map((pm) => {
+                      return (
+                        <div
+                          key={pm.id}
+                          className={`p-4 sm:p-5 rounded-2xl border transition ${
+                            pm.enabled
+                              ? 'bg-[#141624] border-slate-800'
+                              : 'bg-[#11131c] border-slate-800/60 opacity-80'
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-extrabold text-xs shadow-md shrink-0"
+                                style={{ backgroundColor: pm.themeColor || '#e2136e' }}
+                              >
+                                {pm.id === 'bkash' ? 'bK' : pm.id === 'nagad' ? 'NG' : pm.id === 'rocket' ? 'RC' : pm.id === 'binance' ? 'BN' : 'WM'}
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                                  <span>{pm.name}</span>
+                                  <span
+                                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                      pm.enabled
+                                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-700/60'
+                                        : 'bg-red-950 text-red-400 border border-red-700/60'
+                                    }`}
+                                  >
+                                    {pm.enabled ? 'ACTIVE (ON)' : 'DISABLED (OFF)'}
+                                  </span>
+                                </h4>
+                                <span className="text-[11px] text-slate-400 font-mono">
+                                  Gateway: {pm.id}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* ON / OFF Switch */}
+                            <div className="flex items-center gap-3">
+                              <span className="text-xs text-slate-400">Method Status:</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updatePaymentMethod(pm.id, { enabled: !pm.enabled });
+                                  showToast(`${pm.name} is now ${!pm.enabled ? 'ON (Active)' : 'OFF (Disabled)'}`);
+                                }}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition cursor-pointer ${
+                                  pm.enabled ? 'bg-emerald-500' : 'bg-slate-700'
+                                }`}
+                              >
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                                    pm.enabled ? 'translate-x-6' : 'translate-x-1'
+                                  }`}
+                                />
+                              </button>
+                              <span className={`text-xs font-bold ${pm.enabled ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {pm.enabled ? 'ON' : 'OFF'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Form fields */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                            <div>
+                              <label className="text-xs font-semibold text-slate-300 block mb-1">
+                                Display Name
+                              </label>
+                              <input
+                                type="text"
+                                defaultValue={pm.name}
+                                onBlur={(e) => {
+                                  updatePaymentMethod(pm.id, { name: e.target.value });
+                                  showToast('Gateway name updated');
+                                }}
+                                className="w-full bg-[#181a28] text-xs text-slate-100 rounded-lg p-2.5 border border-slate-700 focus:outline-none focus:border-amber-400"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-xs font-semibold text-slate-300 block mb-1">
+                                Wallet Number / Pay ID / Address
+                              </label>
+                              <input
+                                type="text"
+                                defaultValue={pm.numberOrAddress}
+                                onBlur={(e) => {
+                                  updatePaymentMethod(pm.id, { numberOrAddress: e.target.value });
+                                  showToast('Gateway number/address updated');
+                                }}
+                                className="w-full bg-[#181a28] text-xs font-mono text-amber-300 rounded-lg p-2.5 border border-slate-700 focus:outline-none focus:border-amber-400"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-2">
+                              <label className="text-xs font-semibold text-slate-300 block mb-1">
+                                Payment Instructions (Shown to user in VIP Modal)
+                              </label>
+                              <input
+                                type="text"
+                                defaultValue={pm.instructions}
+                                onBlur={(e) => {
+                                  updatePaymentMethod(pm.id, { instructions: e.target.value });
+                                  showToast('Instructions updated');
+                                }}
+                                className="w-full bg-[#181a28] text-xs text-slate-100 rounded-lg p-2.5 border border-slate-700 focus:outline-none focus:border-amber-400"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* TAB 6: CUSTOM SIDEBAR LINKS */}
               {currentTab === 'links' && (
                 <div className="space-y-4">
@@ -1239,14 +1450,126 @@ export const AdminDashboard: React.FC = () => {
                       smartLink2,
                       smartLink3,
                       directDownloadLink: directDownload,
+                      popunderCode,
+                      popunderEnabled,
+                      socialBarCode,
+                      socialBarEnabled,
                     });
+                    showToast('Ad Settings Saved! Popunder & Social Bar connected above </body>');
                   }}
-                  className="p-4 rounded-xl bg-[#131522] border border-slate-800 space-y-4 max-w-2xl"
+                  className="p-4 sm:p-5 rounded-xl bg-[#131522] border border-slate-800 space-y-5 max-w-3xl"
                 >
-                  <h3 className="text-sm font-bold text-slate-200">
-                    Adsterra & Smartlink Monetization Controls
-                  </h3>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-400" />
+                        Monetization & Ad Networks Script Integration
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Popunder এবং Social Bar অ্যাড কোড সরাসরি &lt;/body&gt; ট্যাগের উপরে যুক্ত হবে এবং লাইভ কাজ করবে।
+                      </p>
+                    </div>
+                  </div>
 
+                  {/* 1. POPUNDER ADS CODE (Injected directly above </body>) */}
+                  <div className="p-4 rounded-xl bg-[#171926] border border-amber-500/40 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                          <label className="text-xs font-bold text-amber-300">
+                            1. Popunder Ad Script Code (বডি &lt;/body&gt; ট্যাগের ঠিক উপরে বসবে)
+                          </label>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          সাইটের যেকোনো জায়গায় ইউজার ক্লিক করলেই পপআন্ডার কার্যকর হবে। কোডটি &lt;/body&gt; ট্যাগের ঠিক উপরে বসানো হয়েছে।
+                        </p>
+                      </div>
+
+                      {/* Popunder ON/OFF Toggle */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setPopunderEnabled(!popunderEnabled)}
+                          className={`relative inline-flex h-5 w-10 items-center rounded-full transition cursor-pointer ${
+                            popunderEnabled ? 'bg-emerald-500' : 'bg-slate-700'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition ${
+                              popunderEnabled ? 'translate-x-5' : 'translate-x-1'
+                            }`}
+                          />
+                        </button>
+                        <span className={`text-[11px] font-bold ${popunderEnabled ? 'text-emerald-400' : 'text-slate-500'}`}>
+                          {popunderEnabled ? 'ON' : 'OFF'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <textarea
+                      rows={3}
+                      value={popunderCode}
+                      onChange={(e) => setPopunderCode(e.target.value)}
+                      placeholder="<!-- Paste your Popunder Ad Script here (e.g. Adsterra / Monetag / PropellerAds) -->&#10;<script type='text/javascript' src='//pl12345678.highcpmgate.com/ab/cd/ef/invoke.js'></script>"
+                      className="w-full bg-[#10121d] text-amber-200 font-mono text-xs rounded-lg p-3 border border-slate-700/80 focus:outline-none focus:border-amber-400"
+                    />
+                    <div className="flex items-center justify-between text-[11px] text-slate-400">
+                      <span>Ad Placement: <strong className="text-slate-300 font-mono">Right above &lt;/body&gt;</strong></span>
+                      <span className="text-amber-400/90 font-mono">{popunderCode.length > 0 ? `${popunderCode.length} chars configured` : 'Empty (Ready for script)'}</span>
+                    </div>
+                  </div>
+
+                  {/* 2. SOCIAL BAR ADS CODE (Injected directly above </body>, below Popunder) */}
+                  <div className="p-4 rounded-xl bg-[#171926] border border-blue-500/40 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
+                          <label className="text-xs font-bold text-blue-300">
+                            2. Social Bar Ad Script Code (বডি &lt;/body&gt; ট্যাগের উপরে ও Popunder-এর নিচে বসবে)
+                          </label>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          সোশ্যাল বার পুশ নোটিফিকেশন/বার অ্যাড কোড সরাসরি &lt;/body&gt; ট্যাগের উপরে এবং পপআন্ডার কোডের নিচে বসবে।
+                        </p>
+                      </div>
+
+                      {/* Social Bar ON/OFF Toggle */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setSocialBarEnabled(!socialBarEnabled)}
+                          className={`relative inline-flex h-5 w-10 items-center rounded-full transition cursor-pointer ${
+                            socialBarEnabled ? 'bg-emerald-500' : 'bg-slate-700'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition ${
+                              socialBarEnabled ? 'translate-x-5' : 'translate-x-1'
+                            }`}
+                          />
+                        </button>
+                        <span className={`text-[11px] font-bold ${socialBarEnabled ? 'text-emerald-400' : 'text-slate-500'}`}>
+                          {socialBarEnabled ? 'ON' : 'OFF'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <textarea
+                      rows={3}
+                      value={socialBarCode}
+                      onChange={(e) => setSocialBarCode(e.target.value)}
+                      placeholder="<!-- Paste your Social Bar Script here -->&#10;<script type='text/javascript' src='//alwingulla.com/88/a2/3c/88a23c3b01938b.js'></script>"
+                      className="w-full bg-[#10121d] text-blue-200 font-mono text-xs rounded-lg p-3 border border-slate-700/80 focus:outline-none focus:border-blue-400"
+                    />
+                    <div className="flex items-center justify-between text-[11px] text-slate-400">
+                      <span>Ad Placement: <strong className="text-slate-300 font-mono">Right below Popunder, above &lt;/body&gt;</strong></span>
+                      <span className="text-blue-400/90 font-mono">{socialBarCode.length > 0 ? `${socialBarCode.length} chars configured` : 'Empty (Ready for script)'}</span>
+                    </div>
+                  </div>
+
+                  {/* 3. Top Banner 728x90 */}
                   <div>
                     <label className="text-xs font-semibold text-slate-300 block mb-1">
                       728x90 Header Ad Code (HTML/Script)
@@ -1260,9 +1583,10 @@ export const AdminDashboard: React.FC = () => {
                     />
                   </div>
 
+                  {/* 4. Download 3-Step Smart Links */}
                   <div className="space-y-2 pt-2 border-t border-slate-800">
                     <label className="text-xs font-bold text-amber-300 block">
-                      Download 3-Step Smart Links
+                      Download 3-Step Smart Links (ফ্রি ডাউনলোডের জন্য ৩টি স্মার্টলিংক)
                     </label>
                     <input
                       type="text"
@@ -1287,12 +1611,14 @@ export const AdminDashboard: React.FC = () => {
                     />
                   </div>
 
-                  <button
-                    type="submit"
-                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg uppercase tracking-wider transition cursor-pointer"
-                  >
-                    Save Ad Settings
-                  </button>
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs rounded-lg uppercase tracking-wider transition shadow-lg cursor-pointer"
+                    >
+                      Save Ad Settings & Connect Codes
+                    </button>
+                  </div>
                 </form>
               )}
 
@@ -1619,6 +1945,36 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Download Permission Toggle (Download ON / OFF) */}
+                <div className="p-3.5 rounded-xl bg-[#171926] border border-slate-800 space-y-2">
+                  <label className="text-xs font-bold text-amber-300 block">
+                    Download Feature for Users (৩-স্টেপ বিজ্ঞাপন দেখে ফ্রি ডাউনলোড)
+                  </label>
+                  <div className="flex flex-wrap items-center gap-5">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
+                      <input
+                        type="radio"
+                        name="videoDownloadToggle"
+                        checked={videoDownloadEnabled === true}
+                        onChange={() => setVideoDownloadEnabled(true)}
+                        className="w-4 h-4 accent-emerald-500 cursor-pointer"
+                      />
+                      <span className="text-emerald-400">✅ Download ON (ডাউনলোড চালু - বিজ্ঞাপন দেখে ডাউনলোড করতে পারবে)</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
+                      <input
+                        type="radio"
+                        name="videoDownloadToggle"
+                        checked={videoDownloadEnabled === false}
+                        onChange={() => setVideoDownloadEnabled(false)}
+                        className="w-4 h-4 accent-red-500 cursor-pointer"
+                      />
+                      <span className="text-red-400">🚫 Download OFF (ডাউনলোড বন্ধ - স্ক্রিনে Download Off দেখাবে)</span>
+                    </label>
+                  </div>
+                </div>
+
                 <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
                   <button
                     type="button"
@@ -1632,6 +1988,123 @@ export const AdminDashboard: React.FC = () => {
                     className="px-5 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-bold rounded-lg shadow uppercase tracking-wider cursor-pointer"
                   >
                     {editingVideoId ? 'Save Changes' : 'Publish Post'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* User Profile Edit Modal (Username, Name, Password, Likes, VIP) */}
+        {editingUser && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md overflow-y-auto">
+            <div className="relative w-full max-w-lg bg-[#11131e] rounded-2xl border border-slate-800 shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
+              <div className="flex items-center justify-between px-5 py-3.5 bg-[#161928] border-b border-slate-800 shrink-0">
+                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                  <Edit className="w-4 h-4 text-amber-400" />
+                  Edit User Profile & Credentials
+                </h3>
+                <button
+                  onClick={() => setEditingUser(null)}
+                  className="p-1 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveUserEdit} className="p-5 overflow-y-auto space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Username
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editUserName}
+                    onChange={(e) => setEditUserName(e.target.value)}
+                    className="w-full bg-[#181a28] text-slate-100 text-xs sm:text-sm rounded-lg px-3 py-2 border border-slate-700 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editUserFullName}
+                    onChange={(e) => setEditUserFullName(e.target.value)}
+                    className="w-full bg-[#181a28] text-slate-100 text-xs sm:text-sm rounded-lg px-3 py-2 border border-slate-700 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Password (Admin can change or reset)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editUserPassword}
+                    onChange={(e) => setEditUserPassword(e.target.value)}
+                    className="w-full bg-[#181a28] font-mono text-amber-300 text-xs sm:text-sm rounded-lg px-3 py-2 border border-slate-700 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 block mb-1">
+                      Profile Likes Count (Give Likes)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editUserLikes}
+                      onChange={(e) => setEditUserLikes(Number(e.target.value))}
+                      className="w-full bg-[#181a28] font-mono text-rose-400 text-xs sm:text-sm rounded-lg px-3 py-2 border border-slate-700 focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 block mb-1">
+                      Active Time (Minutes)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editUserMinutes}
+                      onChange={(e) => setEditUserMinutes(Number(e.target.value))}
+                      className="w-full bg-[#181a28] font-mono text-emerald-400 text-xs sm:text-sm rounded-lg px-3 py-2 border border-slate-700 focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <input
+                    type="checkbox"
+                    id="editVipCheck"
+                    checked={editUserIsVip}
+                    onChange={(e) => setEditUserIsVip(e.target.checked)}
+                    className="w-4 h-4 accent-amber-500 rounded"
+                  />
+                  <label htmlFor="editVipCheck" className="text-xs font-bold text-amber-300 cursor-pointer">
+                    Grant VIP Pass Status (VIP Member)
+                  </label>
+                </div>
+
+                <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingUser(null)}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 text-xs font-bold rounded-lg shadow uppercase tracking-wider cursor-pointer"
+                  >
+                    Save User Changes
                   </button>
                 </div>
               </form>

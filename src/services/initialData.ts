@@ -285,6 +285,9 @@ export const INITIAL_AD_SETTINGS: AdSettings = {
   topBannerImage: '',
   nativeBarEnabled: true,
   socialBarEnabled: true,
+  popunderEnabled: true,
+  popunderCode: '',
+  socialBarCode: '',
   smartLink1: 'https://highcpmgate.com/directlink1',
   smartLink2: 'https://highcpmgate.com/directlink2',
   smartLink3: 'https://highcpmgate.com/directlink3',
@@ -326,10 +329,10 @@ export const INITIAL_PAYMENT_METHODS: PaymentMethodConfig[] = [
   },
   {
     id: 'webmoney',
-    name: 'WebMoney (WMZ)',
+    name: 'WebMoney (WMT / WMZ)',
     enabled: true,
-    numberOrAddress: 'Z928374619283',
-    instructions: 'Transfer WMZ purse with your username in transfer note.',
+    numberOrAddress: 'T928374619283 / Z928374619283',
+    instructions: 'Send WMT or WMZ with your MMSHUB username in transfer description.',
     themeColor: '#0072BA',
   },
 ];
