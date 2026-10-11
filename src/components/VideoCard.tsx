@@ -1,7 +1,8 @@
-import React from 'react';
-import { Eye, ThumbsUp, Crown, Play, Lock } from 'lucide-react';
+import React, { useState } from 'react';
+import { Eye, ThumbsUp, Crown, Play, Lock, Film } from 'lucide-react';
 import { Video } from '../types';
 import { useApp } from '../context/AppContext';
+import { getEffectiveThumbnail } from '../services/videoUtils';
 
 interface VideoCardProps {
   video: Video;
@@ -18,7 +19,9 @@ export const VideoCard: React.FC<VideoCardProps> = ({ video }) => {
     t,
   } = useApp();
 
+  const [imageError, setImageError] = useState(false);
   const isLockedForUser = video.isVip && !currentUser?.isVip;
+  const effectiveThumbnail = getEffectiveThumbnail(video);
 
   const handleCardClick = () => {
     incrementVideoView(video.id);
@@ -36,24 +39,33 @@ export const VideoCard: React.FC<VideoCardProps> = ({ video }) => {
       }`}
     >
       {/* Thumbnail Container */}
-      <div className="relative aspect-video w-full bg-[#1c1f2b] overflow-hidden">
-        <img
-          src={video.thumbnailUrl}
-          alt={video.title}
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          className={`w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 ${
-            isLockedForUser ? 'filter blur-[12px] brightness-75 scale-110' : ''
-          }`}
-          onError={(e) => {
-            (e.target as HTMLElement).style.display = 'none';
-          }}
-        />
-
-        {/* Fallback pattern */}
-        <div className="absolute inset-0 bg-gradient-to-tr from-slate-900 via-slate-800 to-slate-900 -z-10 flex items-center justify-center text-slate-500">
-          <Play className="w-10 h-10 opacity-30" />
-        </div>
+      <div className="relative aspect-video w-full bg-[#151722] overflow-hidden">
+        {effectiveThumbnail && !imageError ? (
+          <img
+            src={effectiveThumbnail}
+            alt={video.title}
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            className={`w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 ${
+              isLockedForUser ? 'filter blur-[12px] brightness-75 scale-110' : ''
+            }`}
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          /* High-Quality Native Iframe Fallback Cover */
+          <div className="absolute inset-0 bg-gradient-to-tr from-[#10121a] via-[#1a1d2e] to-[#251f33] flex flex-col items-center justify-center p-3 text-center">
+            <div className="w-12 h-12 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mb-1 text-amber-400 group-hover:scale-110 transition shadow-lg">
+              <Play className="w-6 h-6 fill-amber-400 ml-0.5" />
+            </div>
+            <span className="text-[10px] font-bold text-slate-300 line-clamp-1 max-w-[80%] uppercase tracking-wider">
+              {video.title}
+            </span>
+            <span className="text-[9px] text-amber-400/90 font-mono mt-0.5">
+              STREAM READY • {video.quality || 'HD'}
+            </span>
+          </div>
+        )}
 
         {/* Enhanced Heavy Frosted Glass Blur Overlay for VIP Videos */}
         {isLockedForUser && (

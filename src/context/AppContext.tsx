@@ -30,6 +30,7 @@ import {
   ADULT_STAR_AVATARS,
 } from '../services/initialData';
 import { TRANSLATIONS, Language } from '../services/translations';
+import { extractThumbnailFromEmbed } from '../services/videoUtils';
 
 interface AppContextType {
   // Localization & Theme & Layout
@@ -313,60 +314,97 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('mmshub_2col_layout', isTwoColumnLayout ? 'true' : 'false');
   }, [isTwoColumnLayout]);
 
+  // Debounced, safe persistence to prevent UI thread lock during likes, saves, or unlimited video uploads
   useEffect(() => {
-    localStorage.setItem('mmshub_videos', JSON.stringify(videos));
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem('mmshub_videos', JSON.stringify(videos));
+      } catch (err) {
+        console.warn('LocalStorage videos quota warning:', err);
+      }
+    }, 150);
+    return () => clearTimeout(timer);
   }, [videos]);
 
   useEffect(() => {
-    localStorage.setItem('mmshub_categories', JSON.stringify(baseCategories));
+    try {
+      localStorage.setItem('mmshub_categories', JSON.stringify(baseCategories));
+    } catch {}
   }, [baseCategories]);
 
   useEffect(() => {
-    localStorage.setItem('mmshub_comments', JSON.stringify(comments));
+    try {
+      localStorage.setItem('mmshub_comments', JSON.stringify(comments));
+    } catch {}
   }, [comments]);
 
   useEffect(() => {
-    localStorage.setItem('mmshub_vip_orders', JSON.stringify(vipOrders));
+    try {
+      localStorage.setItem('mmshub_vip_orders', JSON.stringify(vipOrders));
+    } catch {}
   }, [vipOrders]);
 
   useEffect(() => {
-    localStorage.setItem('mmshub_vip_packages', JSON.stringify(vipPackages));
+    try {
+      localStorage.setItem('mmshub_vip_packages', JSON.stringify(vipPackages));
+    } catch {}
   }, [vipPackages]);
 
   useEffect(() => {
-    localStorage.setItem('mmshub_payment_methods', JSON.stringify(paymentMethods));
+    try {
+      localStorage.setItem('mmshub_payment_methods', JSON.stringify(paymentMethods));
+    } catch {}
   }, [paymentMethods]);
 
   useEffect(() => {
-    localStorage.setItem('mmshub_sub_admins', JSON.stringify(subAdmins));
+    try {
+      localStorage.setItem('mmshub_sub_admins', JSON.stringify(subAdmins));
+    } catch {}
   }, [subAdmins]);
 
   useEffect(() => {
-    localStorage.setItem('mmshub_custom_links', JSON.stringify(customSidebarLinks));
+    try {
+      localStorage.setItem('mmshub_custom_links', JSON.stringify(customSidebarLinks));
+    } catch {}
   }, [customSidebarLinks]);
 
   useEffect(() => {
-    localStorage.setItem('mmshub_users', JSON.stringify(users));
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem('mmshub_users', JSON.stringify(users));
+      } catch (err) {
+        console.warn('LocalStorage users quota warning:', err);
+      }
+    }, 150);
+    return () => clearTimeout(timer);
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem('mmshub_ads', JSON.stringify(adSettings));
+    try {
+      localStorage.setItem('mmshub_ads', JSON.stringify(adSettings));
+    } catch {}
   }, [adSettings]);
 
   useEffect(() => {
-    localStorage.setItem('mmshub_site_settings', JSON.stringify(siteSettings));
+    try {
+      localStorage.setItem('mmshub_site_settings', JSON.stringify(siteSettings));
+    } catch {}
   }, [siteSettings]);
 
   useEffect(() => {
-    localStorage.setItem('mmshub_stats', JSON.stringify(stats));
+    try {
+      localStorage.setItem('mmshub_stats', JSON.stringify(stats));
+    } catch {}
   }, [stats]);
 
   useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem('mmshub_current_user', JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem('mmshub_current_user');
-    }
+    try {
+      if (currentUser) {
+        localStorage.setItem('mmshub_current_user', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem('mmshub_current_user');
+      }
+    } catch {}
   }, [currentUser]);
 
   // Live time-on-site tracker for logged-in user: only counts when tab is active/visible
@@ -464,6 +502,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Video Management
   const addVideo = (newVidData: Omit<Video, 'id' | 'createdAt' | 'views' | 'likes' | 'dislikes'>) => {
+    const finalThumb = newVidData.thumbnailUrl?.trim() || extractThumbnailFromEmbed(newVidData.embedCode);
     const newVideo: Video = {
       ...newVidData,
       id: `v-${Date.now()}`,
@@ -472,6 +511,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       likes: 1,
       dislikes: 0,
       downloadEnabled: newVidData.downloadEnabled !== false,
+      thumbnailUrl: finalThumb,
     };
     setVideos((prev) => [newVideo, ...prev]);
     setStats((prev) => ({
@@ -485,7 +525,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateVideo = (id: string, updated: Partial<Video>) => {
     setVideos((prev) =>
-      prev.map((vid) => (vid.id === id ? { ...vid, ...updated } : vid))
+      prev.map((vid) => {
+        if (vid.id !== id) return vid;
+        const newEmbed = updated.embedCode !== undefined ? updated.embedCode : vid.embedCode;
+        const newThumb =
+          updated.thumbnailUrl !== undefined
+            ? updated.thumbnailUrl.trim() || extractThumbnailFromEmbed(newEmbed)
+            : vid.thumbnailUrl || extractThumbnailFromEmbed(newEmbed);
+        return { ...vid, ...updated, thumbnailUrl: newThumb };
+      })
     );
     if (activeVideo && activeVideo.id === id) {
       setActiveVideo((prev) => (prev ? { ...prev, ...updated } : null));
@@ -529,6 +577,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? updatedUser : u)));
   };
 
+  // Ultra-fast instant Like with 0ms UI latency
   const likeVideo = (id: string) => {
     if (!currentUser) {
       setIsAuthModalOpen(true);
@@ -536,32 +585,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     const isLiked = currentUser.likedVideoIds.includes(id);
-    let updatedLikes: string[];
-    if (isLiked) {
-      updatedLikes = currentUser.likedVideoIds.filter((vId) => vId !== id);
-      setVideos((prev) =>
-        prev.map((v) => (v.id === id ? { ...v, likes: Math.max(0, v.likes - 1) } : v))
-      );
-      showToast('Removed like');
-    } else {
-      updatedLikes = [...currentUser.likedVideoIds, id];
-      setVideos((prev) =>
-        prev.map((v) => (v.id === id ? { ...v, likes: v.likes + 1 } : v))
-      );
-      showToast('Liked video 👍');
-    }
-    const updatedUser = { ...currentUser, likedVideoIds: updatedLikes };
+    const updatedLikes = isLiked
+      ? currentUser.likedVideoIds.filter((vId) => vId !== id)
+      : [...currentUser.likedVideoIds, id];
+    const likeDelta = isLiked ? -1 : 1;
+
+    // 1. Instant optimistic update on currentUser (0ms latency)
+    const updatedUser: User = { ...currentUser, likedVideoIds: updatedLikes };
     setCurrentUser(updatedUser);
+
+    // 2. Instant optimistic update on activeVideo if player modal is open
+    if (activeVideo && activeVideo.id === id) {
+      setActiveVideo((prev) =>
+        prev ? { ...prev, likes: Math.max(0, prev.likes + likeDelta) } : null
+      );
+    }
+
+    // 3. Instant optimistic update on videos list
+    setVideos((prev) =>
+      prev.map((v) => (v.id === id ? { ...v, likes: Math.max(0, v.likes + likeDelta) } : v))
+    );
+
+    // 4. Update users collection in background
     setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? updatedUser : u)));
+
+    showToast(isLiked ? 'Removed like' : 'Liked video 👍');
   };
 
   const dislikeVideo = (id: string) => {
     setVideos((prev) =>
       prev.map((v) => (v.id === id ? { ...v, dislikes: v.dislikes + 1 } : v))
     );
+    if (activeVideo && activeVideo.id === id) {
+      setActiveVideo((prev) => (prev ? { ...prev, dislikes: prev.dislikes + 1 } : null));
+    }
     showToast('Feedback submitted');
   };
 
+  // Ultra-fast instant Save with 0ms UI latency
   const toggleSaveVideo = (id: string) => {
     if (!currentUser) {
       setIsAuthModalOpen(true);
@@ -569,17 +630,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     const isSaved = currentUser.savedVideoIds.includes(id);
-    let newSaved: string[];
-    if (isSaved) {
-      newSaved = currentUser.savedVideoIds.filter((vId) => vId !== id);
-      showToast('Removed from Saved Playlist');
-    } else {
-      newSaved = [...currentUser.savedVideoIds, id];
-      showToast('Saved to Playlist 📁');
-    }
-    const updatedUser = { ...currentUser, savedVideoIds: newSaved };
+    const newSaved = isSaved
+      ? currentUser.savedVideoIds.filter((vId) => vId !== id)
+      : [...currentUser.savedVideoIds, id];
+
+    // Instant optimistic update
+    const updatedUser: User = { ...currentUser, savedVideoIds: newSaved };
     setCurrentUser(updatedUser);
+
     setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? updatedUser : u)));
+    showToast(isSaved ? 'Removed from Saved Playlist' : 'Saved to Playlist 📁');
   };
 
   // Comments (Max 3 comments per user per video)

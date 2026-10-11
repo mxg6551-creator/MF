@@ -27,9 +27,12 @@ import {
   CreditCard,
   Check,
   Sparkles,
+  Bell,
+  Zap,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Video, User } from '../../types';
+import { extractThumbnailFromEmbed, extractTitleFromEmbed, compressImage } from '../../services/videoUtils';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -100,6 +103,11 @@ export const AdminDashboard: React.FC = () => {
   const [videoViews, setVideoViews] = useState(1400);
   const [videoLikes, setVideoLikes] = useState(120);
   const [videoDislikes, setVideoDislikes] = useState(5);
+  const [videoNoticeEnabled, setVideoNoticeEnabled] = useState(true);
+  const [videoNoticeMessage, setVideoNoticeMessage] = useState(
+    'ভিডিও দেখতে কোন সমস্যা হলে বা ভিডিও দেখা না গেলে আপনার ফোনে থাকা যে কোন একটি VPN লাগিয়ে নিন!'
+  );
+  const [videoNoticeDuration, setVideoNoticeDuration] = useState(5);
 
   // User management & edit states
   const [userSearchQuery, setUserSearchQuery] = useState('');
@@ -175,15 +183,18 @@ export const AdminDashboard: React.FC = () => {
     setVideoCategory(categories[1]?.slug || 'bangladeshi');
     setVideoTags('Viral, Desi, 1080p');
     setVideoDuration('14:30');
-    setVideoThumbnailUrl('https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80');
-    setVideoEmbedCode('<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" frameborder="0" allowfullscreen></iframe>');
-    setVideoDownloadUrl('https://mega.nz/folder/mmshub-vault');
+    setVideoThumbnailUrl(''); // Optional: empty by default so it auto-extracts native iframe cover!
+    setVideoEmbedCode('');
+    setVideoDownloadUrl('');
     setVideoIsVip(false);
     setVideoDownloadEnabled(true);
     setVideoQuality('HD');
     setVideoViews(1200);
     setVideoLikes(95);
     setVideoDislikes(3);
+    setVideoNoticeEnabled(true);
+    setVideoNoticeMessage('ভিডিও দেখতে কোন সমস্যা হলে বা ভিডিও দেখা না গেলে আপনার ফোনে থাকা যে কোন একটি VPN লাগিয়ে নিন!');
+    setVideoNoticeDuration(5);
     setIsEditorOpen(true);
   };
 
@@ -194,7 +205,7 @@ export const AdminDashboard: React.FC = () => {
     setVideoCategory(video.category);
     setVideoTags(video.tags.join(', '));
     setVideoDuration(video.duration);
-    setVideoThumbnailUrl(video.thumbnailUrl);
+    setVideoThumbnailUrl(video.thumbnailUrl || '');
     setVideoEmbedCode(video.embedCode);
     setVideoDownloadUrl(video.downloadUrl || '');
     setVideoIsVip(video.isVip);
@@ -203,49 +214,68 @@ export const AdminDashboard: React.FC = () => {
     setVideoViews(video.views);
     setVideoLikes(video.likes);
     setVideoDislikes(video.dislikes);
+    setVideoNoticeEnabled(video.noticeEnabled ?? false);
+    setVideoNoticeMessage(video.noticeMessage || 'ভিডিও দেখতে কোন সমস্যা হলে বা ভিডিও দেখা না গেলে আপনার ফোনে থাকা যে কোন একটি VPN লাগিয়ে নিন!');
+    setVideoNoticeDuration(video.noticeDurationSeconds || 5);
     setIsEditorOpen(true);
   };
 
-  // Gallery phone image upload
-  const handleGalleryUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // High-performance gallery image upload with automatic canvas compression
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        showToast('Image size should be under 5MB');
-        return;
+      try {
+        const compressedBase64 = await compressImage(file, 720, 405, 0.8);
+        setVideoThumbnailUrl(compressedBase64);
+        showToast('Gallery image loaded & optimized (~30KB)!');
+      } catch (err) {
+        // Fallback to direct read if canvas fails
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setVideoThumbnailUrl(reader.result as string);
+          showToast('Gallery image loaded!');
+        };
+        reader.readAsDataURL(file);
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setVideoThumbnailUrl(reader.result as string);
-        showToast('Gallery image loaded successfully!');
-      };
-      reader.readAsDataURL(file);
     }
   };
 
   const handleSaveVideo = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!videoTitle.trim()) {
-      showToast('Please enter video title');
-      return;
-    }
     if (!videoEmbedCode.trim()) {
       showToast('Please enter iframe embed code or stream URL');
       return;
     }
+
+    // Auto title if not provided by admin
+    let finalTitle = videoTitle.trim();
+    if (!finalTitle) {
+      finalTitle = extractTitleFromEmbed(videoEmbedCode.trim()) || 'নতুন ভাইরাল স্পেশাল ভিডিও';
+    }
+
     const tagList = videoTags
       .split(',')
       .map((t) => t.trim())
       .filter((t) => t.length > 0);
 
+    // If custom thumbnail is provided, use it. Otherwise, auto-extract from iframe!
+    const autoThumb = extractThumbnailFromEmbed(videoEmbedCode.trim());
+    const finalThumb = videoThumbnailUrl.trim() || autoThumb;
+
+    const noticeSettings = {
+      noticeEnabled: Boolean(videoNoticeEnabled),
+      noticeMessage: videoNoticeMessage.trim() || 'ভিডিও দেখতে কোন সমস্যা হলে বা ভিডিও দেখা না গেলে আপনার ফোনে থাকা যে কোন একটি VPN লাগিয়ে নিন!',
+      noticeDurationSeconds: Math.max(1, Number(videoNoticeDuration) || 5),
+    };
+
     if (editingVideoId) {
       updateVideo(editingVideoId, {
-        title: videoTitle.trim(),
+        title: finalTitle,
         description: videoDesc.trim(),
         category: videoCategory,
         tags: tagList,
         duration: videoDuration.trim() || '12:00',
-        thumbnailUrl: videoThumbnailUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600',
+        thumbnailUrl: finalThumb,
         embedCode: videoEmbedCode.trim(),
         downloadUrl: videoDownloadUrl.trim(),
         isVip: videoIsVip,
@@ -254,21 +284,23 @@ export const AdminDashboard: React.FC = () => {
         views: Number(videoViews),
         likes: Number(videoLikes),
         dislikes: Number(videoDislikes),
+        ...noticeSettings,
       });
     } else {
       addVideo({
-        title: videoTitle.trim(),
+        title: finalTitle,
         description: videoDesc.trim(),
         category: videoCategory,
         tags: tagList,
         duration: videoDuration.trim() || '12:00',
-        thumbnailUrl: videoThumbnailUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600',
+        thumbnailUrl: finalThumb,
         embedCode: videoEmbedCode.trim(),
         downloadUrl: videoDownloadUrl.trim(),
         isVip: videoIsVip,
         downloadEnabled: videoDownloadEnabled,
         quality: videoQuality,
         author: 'Admin Moon',
+        ...noticeSettings,
       });
     }
     setIsEditorOpen(false);
@@ -1767,13 +1799,34 @@ export const AdminDashboard: React.FC = () => {
 
               <form onSubmit={handleSaveVideo} className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
                 <div>
-                  <label className="text-xs font-bold text-slate-300 block mb-1">Video Title</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-300">
+                      Video Title (Optional / ঐচ্ছিক — না দিলে আইফ্রেমের আসল টাইটেল অটোমেটিক বসবে)
+                    </label>
+                    {videoEmbedCode.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const detected = extractTitleFromEmbed(videoEmbedCode);
+                          if (detected) {
+                            setVideoTitle(detected);
+                            showToast(`✓ Title auto-fetched: "${detected}"`);
+                          } else {
+                            showToast('আইফ্রেম থেকে টাইটেল পাওয়া যায়নি। সেভ করার সময় অটো-টাইটেল যুক্ত হবে।');
+                          }
+                        }}
+                        className="text-[11px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer flex items-center gap-1 transition"
+                      >
+                        <Zap className="w-3 h-3 text-amber-400" />
+                        Auto-Detect Title
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
-                    required
                     value={videoTitle}
                     onChange={(e) => setVideoTitle(e.target.value)}
-                    placeholder="e.g. 🔥 VXL-038"
+                    placeholder="ঐচ্ছিক: টাইটেল লিখুন (খালি রাখলে আইফ্রেমের আসল টাইটেল অটো পেস্ট হবে)"
                     className="w-full bg-[#181a28] text-slate-100 text-xs sm:text-sm rounded-lg px-3 py-2 border border-slate-700 focus:outline-none focus:border-amber-400"
                   />
                 </div>
@@ -1853,55 +1906,125 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Thumbnail from Phone Gallery */}
-                <div className="p-3 rounded-xl bg-[#171926] border border-slate-800 space-y-2">
-                  <label className="text-xs font-bold text-amber-300 block">
-                    Thumbnail Cover (Gallery Upload or Image Link)
-                  </label>
-                  <div className="flex flex-col sm:flex-row gap-2 items-center">
-                    <label className="flex-1 w-full cursor-pointer flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold text-slate-200 border border-slate-700 transition">
-                      <Upload className="w-4 h-4 text-amber-400" />
-                      <span>Upload from Phone Gallery</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleGalleryUpload}
-                        className="hidden"
-                      />
+                {/* Embed Iframe Code or Video URL */}
+                <div className="p-3.5 rounded-xl bg-[#171926] border border-amber-500/30 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-amber-300 block">
+                      Embed Iframe Code or Video URL <span className="text-red-400">*</span>
                     </label>
-                    <span className="text-xs text-slate-500">OR</span>
-                    <input
-                      type="text"
-                      value={videoThumbnailUrl}
-                      onChange={(e) => setVideoThumbnailUrl(e.target.value)}
-                      placeholder="Paste Image URL"
-                      className="flex-1 w-full bg-[#12141f] text-slate-100 text-xs rounded-lg px-3 py-2 border border-slate-700"
-                    />
+                    <span className="text-[10px] text-slate-400 font-mono">Streamtape / Dood / YouTube / Mega / mp4</span>
                   </div>
-                  {videoThumbnailUrl && (
-                    <img
-                      src={videoThumbnailUrl}
-                      alt="Preview"
-                      className="w-20 h-12 object-cover rounded border border-slate-700 mt-2"
-                      referrerPolicy="no-referrer"
-                    />
-                  )}
-                </div>
-
-                {/* Embed Iframe Code */}
-                <div>
-                  <label className="text-xs font-bold text-slate-300 block mb-1">
-                    Embed Iframe Code or Video URL
-                  </label>
                   <textarea
                     rows={3}
                     required
                     value={videoEmbedCode}
-                    onChange={(e) => setVideoEmbedCode(e.target.value)}
+                    onChange={(e) => {
+                      const newEmbed = e.target.value;
+                      setVideoEmbedCode(newEmbed);
+                      if (!videoTitle.trim()) {
+                        const autoTitle = extractTitleFromEmbed(newEmbed);
+                        if (autoTitle) {
+                          setVideoTitle(autoTitle);
+                          showToast(`✓ Title auto-pasted: "${autoTitle.slice(0, 35)}..."`);
+                        }
+                      }
+                    }}
                     placeholder='<iframe src="https://streamtape.com/e/..." allowfullscreen></iframe> or https://...'
-                    className="w-full bg-[#181a28] text-slate-100 font-mono text-xs rounded-lg p-2.5 border border-slate-700 focus:outline-none focus:border-amber-400"
+                    className="w-full bg-[#11131e] text-slate-100 font-mono text-xs rounded-lg p-2.5 border border-slate-700 focus:outline-none focus:border-amber-400"
                   />
+                  <p className="text-[11px] text-slate-400">
+                    যেকোনো সাইটের আইফ্রেম কোড বা ভিডিও লিঙ্ক সরাসরি পেস্ট করুন। কোড দিলে টাইটেল ও কভার অটোমেটিক ডিটেক্ট হয়ে যাবে।
+                  </p>
                 </div>
+
+                {/* Thumbnail Cover Image (Optional) */}
+                {(() => {
+                  const autoDetectedThumb = extractThumbnailFromEmbed(videoEmbedCode);
+                  const hasCustomCover = Boolean(videoThumbnailUrl && videoThumbnailUrl.trim().length > 0);
+                  const previewSrc = hasCustomCover ? videoThumbnailUrl : autoDetectedThumb;
+
+                  return (
+                    <div className="p-3.5 rounded-xl bg-[#171926] border border-slate-800 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                        <div>
+                          <label className="text-xs font-bold text-amber-300 block">
+                            Cover Image (Optional / ঐচ্ছিক)
+                          </label>
+                          <span className="text-[11px] text-slate-400">
+                            কাস্টম কভার না দিলে আইফ্রেমের ভিডিওর আসল কভার অটোমেটিক দেখাবে।
+                          </span>
+                        </div>
+                        {hasCustomCover && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setVideoThumbnailUrl('');
+                              showToast('Custom cover removed. Using native iframe cover.');
+                            }}
+                            className="text-[11px] font-bold text-red-400 hover:text-red-300 underline cursor-pointer self-start sm:self-center"
+                          >
+                            Reset to Iframe Cover
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-2 items-center">
+                        <label className="flex-1 w-full cursor-pointer flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold text-slate-200 border border-slate-700 transition">
+                          <Upload className="w-4 h-4 text-amber-400" />
+                          <span>Select from Phone Gallery</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleGalleryUpload}
+                            className="hidden"
+                          />
+                        </label>
+                        <span className="text-xs text-slate-500">OR</span>
+                        <input
+                          type="text"
+                          value={videoThumbnailUrl}
+                          onChange={(e) => setVideoThumbnailUrl(e.target.value)}
+                          placeholder="Optional: Paste Custom Image URL"
+                          className="flex-1 w-full bg-[#12141f] text-slate-100 text-xs rounded-lg px-3 py-2 border border-slate-700"
+                        />
+                      </div>
+
+                      {/* Live Cover Preview */}
+                      <div className="pt-1 flex items-center gap-3">
+                        {previewSrc ? (
+                          <div className="flex items-center gap-3 bg-[#11131e] p-2 rounded-lg border border-slate-800">
+                            <img
+                              src={previewSrc}
+                              alt="Cover Preview"
+                              className="w-24 h-14 object-cover rounded border border-slate-700 shrink-0"
+                              referrerPolicy="no-referrer"
+                            />
+                            <div>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider inline-block ${
+                                  hasCustomCover
+                                    ? 'bg-amber-950 text-amber-400 border border-amber-600/50'
+                                    : 'bg-emerald-950 text-emerald-400 border border-emerald-600/50'
+                                }`}
+                              >
+                                {hasCustomCover ? 'Custom Gallery Cover' : '✓ Auto-Detected from Iframe'}
+                              </span>
+                              <p className="text-[11px] text-slate-300 mt-0.5">
+                                {hasCustomCover
+                                  ? 'This custom cover will display on the video card.'
+                                  : 'Iframe video native cover will display automatically.'}
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-slate-400 italic bg-[#11131e] p-2.5 rounded-lg border border-slate-800 w-full">
+                            ℹ️ কাস্টম কভার সিলেক্ট করা হয়নি — আইফ্রেমের ভিডিওর আসল কভার অটোমেটিক ব্যবহার হবে।
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Mega Download Link */}
                 <div>
@@ -1943,6 +2066,91 @@ export const AdminDashboard: React.FC = () => {
                       VIP Exclusive Video (Requires VIP Pass)
                     </label>
                   </div>
+                </div>
+
+                {/* Video Notification / Notice Popup Settings */}
+                <div className="p-3.5 rounded-xl bg-[#171926] border border-amber-500/30 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <label className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                        <Bell className="w-4 h-4 text-amber-400" />
+                        ভিডিও প্লেয়ার নোটিশ / সতর্কতা মেসেজ (Video Alert Notice)
+                      </label>
+                      <span className="text-[11px] text-slate-400">
+                        ভিডিওতে ক্লিক করলে প্লেয়ারের সামনে একটি নোটিশ পপআপ আসবে।
+                      </span>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer self-start sm:self-center">
+                      <input
+                        type="checkbox"
+                        checked={videoNoticeEnabled}
+                        onChange={(e) => setVideoNoticeEnabled(e.target.checked)}
+                        className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                      />
+                      <span
+                        className={`text-xs font-bold px-2 py-0.5 rounded ${
+                          videoNoticeEnabled
+                            ? 'bg-emerald-950 text-emerald-400 border border-emerald-600/40'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {videoNoticeEnabled ? '✅ Notice ON (নোটিশ চালু)' : '❌ Notice OFF (বন্ধ)'}
+                      </span>
+                    </label>
+                  </div>
+
+                  {videoNoticeEnabled && (
+                    <div className="space-y-3 pt-2 border-t border-slate-800">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                          নোটিশ মেসেজ লিখুন (Editable Notice Message):
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={videoNoticeMessage}
+                          onChange={(e) => setVideoNoticeMessage(e.target.value)}
+                          placeholder="ভিডিও দেখতে কোন সমস্যা হলে বা ভিডিও দেখা না গেলে আপনার ফোনে থাকা যে কোন একটি VPN লাগিয়ে নিন!"
+                          className="w-full bg-[#11131e] text-slate-100 text-xs rounded-lg p-2.5 border border-slate-700 focus:outline-none focus:border-amber-400"
+                        />
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-[#121420] p-2.5 rounded-lg border border-slate-800">
+                        <div className="text-[11px] text-slate-300">
+                          <span className="font-semibold text-amber-400">কত সেকেন্ড নোটিশটি প্রদর্শিত হবে?</span>
+                          <span className="text-slate-400 block text-[10px]">
+                            নির্দিষ্ট সেকেন্ড পর নোটিশটি স্বয়ংক্রিয়ভাবে বন্ধ হয়ে যাবে
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={1}
+                            max={60}
+                            value={videoNoticeDuration}
+                            onChange={(e) => setVideoNoticeDuration(Math.max(1, Number(e.target.value)))}
+                            className="w-16 bg-[#181a28] text-center text-xs font-bold text-amber-400 p-1.5 rounded border border-slate-700"
+                          />
+                          <span className="text-xs text-slate-400">সেকেন্ড</span>
+                          <div className="flex gap-1 ml-1">
+                            {[3, 5, 8, 10].map((sec) => (
+                              <button
+                                key={sec}
+                                type="button"
+                                onClick={() => setVideoNoticeDuration(sec)}
+                                className={`px-2 py-1 text-[10px] font-bold rounded cursor-pointer transition ${
+                                  videoNoticeDuration === sec
+                                    ? 'bg-amber-500 text-slate-950 font-black'
+                                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                                }`}
+                              >
+                                {sec}s
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Download Permission Toggle (Download ON / OFF) */}

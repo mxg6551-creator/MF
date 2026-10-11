@@ -16,6 +16,9 @@ export interface Video {
   downloadUrl?: string;
   downloadEnabled?: boolean;
   quality?: 'HD' | '4K' | 'SD';
+  noticeEnabled?: boolean;
+  noticeMessage?: string;
+  noticeDurationSeconds?: number;
 }
 
 export interface Comment {
