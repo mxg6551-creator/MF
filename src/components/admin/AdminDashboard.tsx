@@ -27,12 +27,10 @@ import {
   CreditCard,
   Check,
   Sparkles,
-  Bell,
-  Zap,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Video, User } from '../../types';
-import { extractThumbnailFromEmbed, extractTitleFromEmbed, compressImage } from '../../services/videoUtils';
+import { extractThumbnailFromEmbed, compressImage } from '../../services/videoUtils';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -103,11 +101,6 @@ export const AdminDashboard: React.FC = () => {
   const [videoViews, setVideoViews] = useState(1400);
   const [videoLikes, setVideoLikes] = useState(120);
   const [videoDislikes, setVideoDislikes] = useState(5);
-  const [videoNoticeEnabled, setVideoNoticeEnabled] = useState(true);
-  const [videoNoticeMessage, setVideoNoticeMessage] = useState(
-    'ভিডিও দেখতে কোন সমস্যা হলে বা ভিডিও দেখা না গেলে আপনার ফোনে থাকা যে কোন একটি VPN লাগিয়ে নিন!'
-  );
-  const [videoNoticeDuration, setVideoNoticeDuration] = useState(5);
 
   // User management & edit states
   const [userSearchQuery, setUserSearchQuery] = useState('');
@@ -192,9 +185,6 @@ export const AdminDashboard: React.FC = () => {
     setVideoViews(1200);
     setVideoLikes(95);
     setVideoDislikes(3);
-    setVideoNoticeEnabled(true);
-    setVideoNoticeMessage('ভিডিও দেখতে কোন সমস্যা হলে বা ভিডিও দেখা না গেলে আপনার ফোনে থাকা যে কোন একটি VPN লাগিয়ে নিন!');
-    setVideoNoticeDuration(5);
     setIsEditorOpen(true);
   };
 
@@ -214,9 +204,6 @@ export const AdminDashboard: React.FC = () => {
     setVideoViews(video.views);
     setVideoLikes(video.likes);
     setVideoDislikes(video.dislikes);
-    setVideoNoticeEnabled(video.noticeEnabled ?? false);
-    setVideoNoticeMessage(video.noticeMessage || 'ভিডিও দেখতে কোন সমস্যা হলে বা ভিডিও দেখা না গেলে আপনার ফোনে থাকা যে কোন একটি VPN লাগিয়ে নিন!');
-    setVideoNoticeDuration(video.noticeDurationSeconds || 5);
     setIsEditorOpen(true);
   };
 
@@ -242,17 +229,14 @@ export const AdminDashboard: React.FC = () => {
 
   const handleSaveVideo = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!videoTitle.trim()) {
+      showToast('Please enter video title');
+      return;
+    }
     if (!videoEmbedCode.trim()) {
       showToast('Please enter iframe embed code or stream URL');
       return;
     }
-
-    // Auto title if not provided by admin
-    let finalTitle = videoTitle.trim();
-    if (!finalTitle) {
-      finalTitle = extractTitleFromEmbed(videoEmbedCode.trim()) || 'নতুন ভাইরাল স্পেশাল ভিডিও';
-    }
-
     const tagList = videoTags
       .split(',')
       .map((t) => t.trim())
@@ -262,15 +246,9 @@ export const AdminDashboard: React.FC = () => {
     const autoThumb = extractThumbnailFromEmbed(videoEmbedCode.trim());
     const finalThumb = videoThumbnailUrl.trim() || autoThumb;
 
-    const noticeSettings = {
-      noticeEnabled: Boolean(videoNoticeEnabled),
-      noticeMessage: videoNoticeMessage.trim() || 'ভিডিও দেখতে কোন সমস্যা হলে বা ভিডিও দেখা না গেলে আপনার ফোনে থাকা যে কোন একটি VPN লাগিয়ে নিন!',
-      noticeDurationSeconds: Math.max(1, Number(videoNoticeDuration) || 5),
-    };
-
     if (editingVideoId) {
       updateVideo(editingVideoId, {
-        title: finalTitle,
+        title: videoTitle.trim(),
         description: videoDesc.trim(),
         category: videoCategory,
         tags: tagList,
@@ -284,11 +262,10 @@ export const AdminDashboard: React.FC = () => {
         views: Number(videoViews),
         likes: Number(videoLikes),
         dislikes: Number(videoDislikes),
-        ...noticeSettings,
       });
     } else {
       addVideo({
-        title: finalTitle,
+        title: videoTitle.trim(),
         description: videoDesc.trim(),
         category: videoCategory,
         tags: tagList,
@@ -300,7 +277,6 @@ export const AdminDashboard: React.FC = () => {
         downloadEnabled: videoDownloadEnabled,
         quality: videoQuality,
         author: 'Admin Moon',
-        ...noticeSettings,
       });
     }
     setIsEditorOpen(false);
@@ -1799,34 +1775,13 @@ export const AdminDashboard: React.FC = () => {
 
               <form onSubmit={handleSaveVideo} className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-bold text-slate-300">
-                      Video Title (Optional / ঐচ্ছিক — না দিলে আইফ্রেমের আসল টাইটেল অটোমেটিক বসবে)
-                    </label>
-                    {videoEmbedCode.trim() && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const detected = extractTitleFromEmbed(videoEmbedCode);
-                          if (detected) {
-                            setVideoTitle(detected);
-                            showToast(`✓ Title auto-fetched: "${detected}"`);
-                          } else {
-                            showToast('আইফ্রেম থেকে টাইটেল পাওয়া যায়নি। সেভ করার সময় অটো-টাইটেল যুক্ত হবে।');
-                          }
-                        }}
-                        className="text-[11px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer flex items-center gap-1 transition"
-                      >
-                        <Zap className="w-3 h-3 text-amber-400" />
-                        Auto-Detect Title
-                      </button>
-                    )}
-                  </div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">Video Title</label>
                   <input
                     type="text"
+                    required
                     value={videoTitle}
                     onChange={(e) => setVideoTitle(e.target.value)}
-                    placeholder="ঐচ্ছিক: টাইটেল লিখুন (খালি রাখলে আইফ্রেমের আসল টাইটেল অটো পেস্ট হবে)"
+                    placeholder="e.g. 🔥 VXL-038"
                     className="w-full bg-[#181a28] text-slate-100 text-xs sm:text-sm rounded-lg px-3 py-2 border border-slate-700 focus:outline-none focus:border-amber-400"
                   />
                 </div>
@@ -1918,22 +1873,12 @@ export const AdminDashboard: React.FC = () => {
                     rows={3}
                     required
                     value={videoEmbedCode}
-                    onChange={(e) => {
-                      const newEmbed = e.target.value;
-                      setVideoEmbedCode(newEmbed);
-                      if (!videoTitle.trim()) {
-                        const autoTitle = extractTitleFromEmbed(newEmbed);
-                        if (autoTitle) {
-                          setVideoTitle(autoTitle);
-                          showToast(`✓ Title auto-pasted: "${autoTitle.slice(0, 35)}..."`);
-                        }
-                      }
-                    }}
+                    onChange={(e) => setVideoEmbedCode(e.target.value)}
                     placeholder='<iframe src="https://streamtape.com/e/..." allowfullscreen></iframe> or https://...'
                     className="w-full bg-[#11131e] text-slate-100 font-mono text-xs rounded-lg p-2.5 border border-slate-700 focus:outline-none focus:border-amber-400"
                   />
                   <p className="text-[11px] text-slate-400">
-                    যেকোনো সাইটের আইফ্রেম কোড বা ভিডিও লিঙ্ক সরাসরি পেস্ট করুন। কোড দিলে টাইটেল ও কভার অটোমেটিক ডিটেক্ট হয়ে যাবে।
+                    যেকোনো সাইটের আইফ্রেম কোড বা ভিডিও লিঙ্ক সরাসরি পেস্ট করুন। কোড থেকে স্বয়ংক্রিয়ভাবে ভিডিও প্লে হবে।
                   </p>
                 </div>
 
@@ -2066,91 +2011,6 @@ export const AdminDashboard: React.FC = () => {
                       VIP Exclusive Video (Requires VIP Pass)
                     </label>
                   </div>
-                </div>
-
-                {/* Video Notification / Notice Popup Settings */}
-                <div className="p-3.5 rounded-xl bg-[#171926] border border-amber-500/30 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div>
-                      <label className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                        <Bell className="w-4 h-4 text-amber-400" />
-                        ভিডিও প্লেয়ার নোটিশ / সতর্কতা মেসেজ (Video Alert Notice)
-                      </label>
-                      <span className="text-[11px] text-slate-400">
-                        ভিডিওতে ক্লিক করলে প্লেয়ারের সামনে একটি নোটিশ পপআপ আসবে।
-                      </span>
-                    </div>
-                    <label className="flex items-center gap-2 cursor-pointer self-start sm:self-center">
-                      <input
-                        type="checkbox"
-                        checked={videoNoticeEnabled}
-                        onChange={(e) => setVideoNoticeEnabled(e.target.checked)}
-                        className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
-                      />
-                      <span
-                        className={`text-xs font-bold px-2 py-0.5 rounded ${
-                          videoNoticeEnabled
-                            ? 'bg-emerald-950 text-emerald-400 border border-emerald-600/40'
-                            : 'bg-slate-800 text-slate-400'
-                        }`}
-                      >
-                        {videoNoticeEnabled ? '✅ Notice ON (নোটিশ চালু)' : '❌ Notice OFF (বন্ধ)'}
-                      </span>
-                    </label>
-                  </div>
-
-                  {videoNoticeEnabled && (
-                    <div className="space-y-3 pt-2 border-t border-slate-800">
-                      <div>
-                        <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                          নোটিশ মেসেজ লিখুন (Editable Notice Message):
-                        </label>
-                        <textarea
-                          rows={2}
-                          value={videoNoticeMessage}
-                          onChange={(e) => setVideoNoticeMessage(e.target.value)}
-                          placeholder="ভিডিও দেখতে কোন সমস্যা হলে বা ভিডিও দেখা না গেলে আপনার ফোনে থাকা যে কোন একটি VPN লাগিয়ে নিন!"
-                          className="w-full bg-[#11131e] text-slate-100 text-xs rounded-lg p-2.5 border border-slate-700 focus:outline-none focus:border-amber-400"
-                        />
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-[#121420] p-2.5 rounded-lg border border-slate-800">
-                        <div className="text-[11px] text-slate-300">
-                          <span className="font-semibold text-amber-400">কত সেকেন্ড নোটিশটি প্রদর্শিত হবে?</span>
-                          <span className="text-slate-400 block text-[10px]">
-                            নির্দিষ্ট সেকেন্ড পর নোটিশটি স্বয়ংক্রিয়ভাবে বন্ধ হয়ে যাবে
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min={1}
-                            max={60}
-                            value={videoNoticeDuration}
-                            onChange={(e) => setVideoNoticeDuration(Math.max(1, Number(e.target.value)))}
-                            className="w-16 bg-[#181a28] text-center text-xs font-bold text-amber-400 p-1.5 rounded border border-slate-700"
-                          />
-                          <span className="text-xs text-slate-400">সেকেন্ড</span>
-                          <div className="flex gap-1 ml-1">
-                            {[3, 5, 8, 10].map((sec) => (
-                              <button
-                                key={sec}
-                                type="button"
-                                onClick={() => setVideoNoticeDuration(sec)}
-                                className={`px-2 py-1 text-[10px] font-bold rounded cursor-pointer transition ${
-                                  videoNoticeDuration === sec
-                                    ? 'bg-amber-500 text-slate-950 font-black'
-                                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                                }`}
-                              >
-                                {sec}s
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* Download Permission Toggle (Download ON / OFF) */}

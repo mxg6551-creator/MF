@@ -22,12 +22,6 @@ import {
   Zap,
   Clock,
   Ban,
-  Play,
-  Pause,
-  RotateCcw,
-  RotateCw,
-  Maximize,
-  AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { AdBanner } from './AdBanner';
@@ -67,20 +61,6 @@ export const VideoPlayerModal: React.FC = () => {
   const [ad2Countdown, setAd2Countdown] = useState<number>(0);
   const [ad3Countdown, setAd3Countdown] = useState<number>(0);
 
-  // Player Overlay & Controls State
-  const videoContainerRef = React.useRef<HTMLDivElement>(null);
-  const iframeRef = React.useRef<HTMLIFrameElement>(null);
-  const html5VideoRef = React.useRef<HTMLVideoElement>(null);
-  const controlsTimerRef = React.useRef<any>(null);
-
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [overlayFeedback, setOverlayFeedback] = useState<string | null>(null);
-  const [isControlsHovered, setIsControlsHovered] = useState(true);
-
-  // Per-Video Alert Notice state
-  const [noticeVisible, setNoticeVisible] = useState(false);
-  const [noticeCountdown, setNoticeCountdown] = useState(5);
-
   useEffect(() => {
     setAd1Verified(false);
     setAd2Verified(false);
@@ -88,121 +68,10 @@ export const VideoPlayerModal: React.FC = () => {
     setAd1Countdown(0);
     setAd2Countdown(0);
     setAd3Countdown(0);
-    setIsPlaying(false);
-    setOverlayFeedback(null);
-    setIsControlsHovered(true);
-
     if (activeVideo?.id) {
       recordVideoWatch(activeVideo.id);
-
-      // Setup notice popup if enabled for this video
-      const vid = videos.find((v) => v.id === activeVideo.id) || activeVideo;
-      if (vid.noticeEnabled !== false && vid.noticeMessage && vid.noticeMessage.trim().length > 0) {
-        setNoticeVisible(true);
-        const dur = Math.max(1, vid.noticeDurationSeconds || 5);
-        setNoticeCountdown(dur);
-      } else {
-        setNoticeVisible(false);
-      }
     }
-  }, [activeVideo?.id, recordVideoWatch, videos]);
-
-  // Notice popup countdown timer
-  useEffect(() => {
-    if (!noticeVisible || noticeCountdown <= 0) return;
-    const timer = setInterval(() => {
-      setNoticeCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          setNoticeVisible(false);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [noticeVisible, noticeCountdown]);
-
-  const triggerFeedback = (msg: string) => {
-    setOverlayFeedback(msg);
-    setTimeout(() => {
-      setOverlayFeedback((curr) => (curr === msg ? null : curr));
-    }, 1200);
-  };
-
-  const handleTogglePlay = () => {
-    const nextPlaying = !isPlaying;
-    setIsPlaying(nextPlaying);
-
-    if (html5VideoRef.current) {
-      if (nextPlaying) {
-        html5VideoRef.current.play().catch(() => {});
-      } else {
-        html5VideoRef.current.pause();
-      }
-    }
-
-    if (iframeRef.current?.contentWindow) {
-      try {
-        iframeRef.current.contentWindow.postMessage(
-          JSON.stringify({
-            event: 'command',
-            func: nextPlaying ? 'playVideo' : 'pauseVideo',
-            args: [],
-          }),
-          '*'
-        );
-        iframeRef.current.contentWindow.postMessage(
-          JSON.stringify({ method: nextPlaying ? 'play' : 'pause' }),
-          '*'
-        );
-      } catch {}
-    }
-
-    triggerFeedback(nextPlaying ? '▶ PLAYING' : '⏸ PAUSED');
-  };
-
-  const handleSeek = (offsetSec: number) => {
-    if (html5VideoRef.current) {
-      const newTime = Math.max(0, html5VideoRef.current.currentTime + offsetSec);
-      html5VideoRef.current.currentTime = newTime;
-    }
-
-    if (iframeRef.current?.contentWindow) {
-      try {
-        iframeRef.current.contentWindow.postMessage(
-          JSON.stringify({
-            event: 'command',
-            func: 'seekTo',
-            args: [offsetSec > 0 ? 10 : 0, true],
-          }),
-          '*'
-        );
-      } catch {}
-    }
-
-    triggerFeedback(offsetSec > 0 ? '⏩ +10s Forward' : '⏪ -10s Rewind');
-  };
-
-  const handleFullscreen = () => {
-    if (videoContainerRef.current) {
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      } else {
-        videoContainerRef.current.requestFullscreen().catch(() => {});
-      }
-    }
-  };
-
-  const handleMouseMoveOnPlayer = () => {
-    setIsControlsHovered(true);
-    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
-    controlsTimerRef.current = setTimeout(() => {
-      if (isPlaying) {
-        setIsControlsHovered(false);
-      }
-    }, 3000);
-  };
+  }, [activeVideo?.id, recordVideoWatch]);
 
   if (!activeVideo) return null;
 
@@ -365,218 +234,59 @@ export const VideoPlayerModal: React.FC = () => {
     const embed = (currentVideo.embedCode || '').trim();
     const iframeSrc = extractIframeSrc(embed);
 
-    let playerElement: React.ReactNode = null;
-
     if (iframeSrc) {
-      playerElement = (
-        <iframe
-          ref={iframeRef}
-          key={currentVideo.id}
-          src={iframeSrc}
-          title={currentVideo.title}
-          className="w-full h-full border-0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-          allowFullScreen
-          loading="lazy"
-        />
+      return (
+        <div className="relative aspect-video w-full bg-black overflow-hidden">
+          <iframe
+            key={currentVideo.id}
+            src={iframeSrc}
+            title={currentVideo.title}
+            className="w-full h-full border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            allowFullScreen
+            loading="lazy"
+          />
+        </div>
       );
     } else if (embed.includes('<iframe')) {
-      playerElement = (
+      return (
         <div
-          className="w-full h-full [&>iframe]:w-full [&>iframe]:h-full [&>iframe]:border-0"
+          className="relative aspect-video w-full bg-black overflow-hidden [&>iframe]:w-full [&>iframe]:h-full [&>iframe]:border-0"
           dangerouslySetInnerHTML={{ __html: embed }}
         />
       );
     } else if (embed.endsWith('.mp4') || embed.endsWith('.webm') || embed.endsWith('.m3u8')) {
-      playerElement = (
-        <video
-          ref={html5VideoRef}
-          controls
-          autoPlay={false}
-          poster={getEffectiveThumbnail(currentVideo)}
-          className="w-full h-full object-contain"
-        >
-          <source src={embed} type="video/mp4" />
-          Your browser does not support HTML5 video.
-        </video>
+      return (
+        <div className="relative aspect-video w-full bg-black flex items-center justify-center">
+          <video
+            controls
+            autoPlay={false}
+            poster={getEffectiveThumbnail(currentVideo)}
+            className="w-full h-full object-contain"
+          >
+            <source src={embed} type="video/mp4" />
+            Your browser does not support HTML5 video.
+          </video>
+        </div>
       );
     } else {
-      playerElement = (
-        <video
-          ref={html5VideoRef}
-          controls
-          autoPlay={false}
-          poster={getEffectiveThumbnail(currentVideo)}
-          className="w-full h-full object-contain"
-        >
-          <source
-            src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-            type="video/mp4"
-          />
-          Your browser does not support HTML5 video.
-        </video>
+      return (
+        <div className="relative aspect-video w-full bg-black flex items-center justify-center">
+          <video
+            controls
+            autoPlay={false}
+            poster={getEffectiveThumbnail(currentVideo)}
+            className="w-full h-full object-contain"
+          >
+            <source
+              src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+              type="video/mp4"
+            />
+            Your browser does not support HTML5 video.
+          </video>
+        </div>
       );
     }
-
-    return (
-      <div
-        ref={videoContainerRef}
-        onMouseMove={handleMouseMoveOnPlayer}
-        className="relative aspect-video w-full bg-black overflow-hidden group select-none"
-      >
-        {/* Core Video Player / Iframe */}
-        <div className="w-full h-full">{playerElement}</div>
-
-        {/* Top Title Concealment Mask (Conceals iframe internal title bar/channel badges) */}
-        <div className="absolute top-0 left-0 right-0 h-12 sm:h-14 bg-gradient-to-b from-[#08090f] via-[#08090f]/90 to-transparent z-25 pointer-events-none" />
-
-        {/* Quick Floating Bold Exit Button on Video Player Top-Right */}
-        <button
-          type="button"
-          onClick={() => setActiveVideo(null)}
-          aria-label="Exit Video"
-          title="ভিডিও বন্ধ করুন (Exit Video)"
-          className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 z-40 p-2 sm:p-2.5 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-2xl border-2 border-white/80 active:scale-90 transition-all cursor-pointer pointer-events-auto flex items-center justify-center group"
-        >
-          <X className="w-5 h-5 sm:w-6 sm:h-6 stroke-[3.5] text-white group-hover:rotate-90 transition-transform" />
-        </button>
-
-        {/* Video Notice Popup (if enabled for this video) */}
-        {noticeVisible && (
-          <div className="absolute inset-0 z-35 flex items-center justify-center p-3 sm:p-5 bg-black/65 backdrop-blur-[2px] pointer-events-auto animate-in fade-in">
-            <div className="relative max-w-sm sm:max-w-md w-full bg-[#121524]/95 border-2 border-amber-500/70 rounded-2xl p-4 sm:p-5 shadow-2xl text-center space-y-3">
-              <div className="w-11 h-11 mx-auto rounded-full bg-amber-500/20 border border-amber-400/80 flex items-center justify-center text-amber-300">
-                <AlertTriangle className="w-6 h-6 text-amber-400 animate-pulse" />
-              </div>
-              <div className="space-y-1.5">
-                <span className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-amber-300 bg-amber-500/15 px-3 py-0.5 rounded-full border border-amber-500/40 inline-block">
-                  ⚠️ বিশেষ সতর্কতা নোটিশ (Notice)
-                </span>
-                <p className="text-xs sm:text-sm font-semibold text-slate-100 leading-relaxed px-1">
-                  {currentVideo.noticeMessage ||
-                    'ভিডিও দেখতে কোন সমস্যা হলে বা ভিডিও দেখা না গেলে আপনার ফোনে থাকা যে কোন একটি VPN লাগিয়ে নিন!'}
-                </p>
-              </div>
-              <div className="pt-2 flex items-center justify-between border-t border-slate-800/80 text-xs">
-                <span className="text-amber-400 font-mono font-bold flex items-center gap-1 text-[11px]">
-                  <Clock className="w-3.5 h-3.5" />
-                  {noticeCountdown} সেকেন্ডে বন্ধ হবে
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setNoticeVisible(false)}
-                  className="px-4 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black rounded-xl shadow cursor-pointer transition active:scale-95 text-xs"
-                >
-                  বুঝেছি / Skip ({noticeCountdown}s)
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Custom Player Controls Layer (pointer-events-none lets clicks pass through to iframe) */}
-        <div
-          className={`absolute inset-0 z-30 pointer-events-none flex flex-col justify-between p-3 sm:p-4 transition-opacity duration-300 ${
-            isControlsHovered || !isPlaying ? 'opacity-100' : 'opacity-0'
-          }`}
-        >
-          {/* Top Bar on Player */}
-          <div className="flex items-center justify-between pointer-events-none">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider bg-black/75 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded pointer-events-auto">
-                {currentVideo.quality || 'HD'} 1080p
-              </span>
-            </div>
-          </div>
-
-          {/* Center Controls (-10s, Big Play/Pause, +10s) */}
-          <div className="flex items-center justify-center gap-4 sm:gap-8 my-auto pointer-events-none">
-            <button
-              type="button"
-              onClick={() => handleSeek(-10)}
-              title="10 সেকেন্ড পিছিয়ে দেখুন (-10s Rewind)"
-              className="pointer-events-auto w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/75 hover:bg-black/95 text-slate-200 hover:text-amber-400 border border-white/20 hover:border-amber-400/60 shadow-xl backdrop-blur-sm flex items-center justify-center transition-transform active:scale-90 cursor-pointer group"
-            >
-              <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6 group-hover:-rotate-45 transition-transform" />
-              <span className="sr-only">Rewind 10s</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleTogglePlay}
-              title={isPlaying ? 'Pause Video' : 'Play Video'}
-              className="pointer-events-auto w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-400 text-slate-950 shadow-2xl flex items-center justify-center transition-transform hover:scale-110 active:scale-95 cursor-pointer ring-4 ring-amber-500/30"
-            >
-              {isPlaying ? (
-                <Pause className="w-7 h-7 sm:w-8 sm:h-8 fill-black" />
-              ) : (
-                <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-black ml-1" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSeek(10)}
-              title="10 সেকেন্ড এগিয়ে দেখুন (+10s Forward)"
-              className="pointer-events-auto w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/75 hover:bg-black/95 text-slate-200 hover:text-amber-400 border border-white/20 hover:border-amber-400/60 shadow-xl backdrop-blur-sm flex items-center justify-center transition-transform active:scale-90 cursor-pointer group"
-            >
-              <RotateCw className="w-5 h-5 sm:w-6 sm:h-6 group-hover:rotate-45 transition-transform" />
-              <span className="sr-only">Forward 10s</span>
-            </button>
-          </div>
-
-          {/* Center Action Feedback Flash */}
-          {overlayFeedback && (
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-35 animate-in fade-in zoom-in-90">
-              <span className="px-4 py-2 rounded-xl bg-black/90 text-amber-300 font-extrabold text-xs sm:text-sm border border-amber-500/40 shadow-2xl tracking-wide flex items-center gap-1.5 backdrop-blur-sm">
-                {overlayFeedback}
-              </span>
-            </div>
-          )}
-
-          {/* Bottom Quick Controls Bar */}
-          <div className="flex items-center justify-between bg-black/75 backdrop-blur-sm px-3 py-1.5 rounded-xl border border-white/10 pointer-events-auto text-xs text-slate-200">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleTogglePlay}
-                className="p-1 hover:text-amber-400 cursor-pointer transition"
-              >
-                {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSeek(-10)}
-                className="text-[11px] font-bold hover:text-amber-400 cursor-pointer px-1.5 py-0.5 rounded bg-white/10"
-              >
-                -10s
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSeek(10)}
-                className="text-[11px] font-bold hover:text-amber-400 cursor-pointer px-1.5 py-0.5 rounded bg-white/10"
-              >
-                +10s
-              </button>
-              <span className="text-[11px] text-slate-300 font-mono hidden sm:inline">
-                {currentVideo.duration || 'Live'}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleFullscreen}
-                title="Fullscreen"
-                className="p-1 hover:text-amber-400 cursor-pointer transition"
-              >
-                <Maximize className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -605,11 +315,9 @@ export const VideoPlayerModal: React.FC = () => {
           <button
             onClick={() => setActiveVideo(null)}
             aria-label="Close Video Player"
-            title="ভিডিও বন্ধ করুন (Exit Video)"
-            className="flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-red-950/50 border-2 border-red-400/90 active:scale-95 transition-all cursor-pointer shrink-0 group"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition shrink-0 cursor-pointer"
           >
-            <X className="w-5 h-5 sm:w-6 sm:h-6 stroke-[3.5] text-white group-hover:rotate-90 transition-transform duration-200" />
-            <span className="font-extrabold uppercase tracking-wider">EXIT</span>
+            <X className="w-5 h-5" />
           </button>
         </div>
 
